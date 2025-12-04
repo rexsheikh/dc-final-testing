@@ -196,8 +196,10 @@ main() {
     
     log_info "Creating dependency installation script..."
     
-    # Create temporary script for VM
-    cat > /tmp/install_deps.sh << 'EOFSCRIPT'
+VENV_PATH="/opt/anki-service/venv"
+
+# Create temporary script for VM
+cat > /tmp/install_deps.sh << 'EOFSCRIPT'
 #!/usr/bin/env bash
 set -euxo pipefail
 
@@ -217,7 +219,7 @@ sudo apt-get install -y \
     wget
 
 echo "==> Ensuring python3 pip module is available..."
-sudo python3 -m ensurepip --upgrade || true
+sudo apt-get install --reinstall -y python3-pip python3-setuptools python3-wheel
 
 echo "==> Configuring Redis..."
 sudo systemctl enable redis-server
@@ -233,6 +235,12 @@ sudo chown $(whoami):$(whoami) /opt/anki-service
 echo "==> Installing global Python packages..."
 sudo python3 -m pip install --upgrade pip setuptools wheel
 python3 -m pip --version
+
+echo "==> Creating virtual environment..."
+python3 -m venv /opt/anki-service/venv
+source /opt/anki-service/venv/bin/activate
+pip install --upgrade pip setuptools wheel
+pip --version
 
 echo "==> Dependency installation complete!"
 EOFSCRIPT
@@ -260,10 +268,10 @@ EOFSCRIPT
             --quiet || error_exit "Failed to copy requirements.txt to VM"
 
         log_info "Installing Python dependencies on base VM (cached in snapshot)..."
-        gcloud compute ssh "$BASE_INSTANCE" \
-            --zone="$ZONE" \
-            --command="sudo python3 -m pip install --no-cache-dir --ignore-installed -r /tmp/requirements.txt && rm /tmp/requirements.txt" \
-            --quiet || error_exit "Failed to pre-install Python dependencies"
+    gcloud compute ssh "$BASE_INSTANCE" \
+        --zone="$ZONE" \
+        --command="source /opt/anki-service/venv/bin/activate && pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt" \
+        --quiet || error_exit "Failed to pre-install Python dependencies"
         log_success "Python requirements installed on base VM"
     else
         log_warning "requirements.txt not found at $REQUIREMENTS_PATH; skipping pre-install"
