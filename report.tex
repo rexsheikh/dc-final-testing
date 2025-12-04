@@ -1,0 +1,131 @@
+\documentclass[11pt]{article}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{setspace}
+\usepackage{hyperref}
+\usepackage{enumitem}
+
+\geometry{margin=1in}
+\setlength{\parskip}{0.5em}
+\setlength{\parindent}{0pt}
+
+\begin{document}
+
+\begin{center}
+{\LARGE \textbf{PDF-to-Anki Text Service Report}}\\[0.5em]
+{\large Based on \texttt{ARCHITECTURE.md}}
+\end{center}
+
+\section{Software and Hardware Components}
+
+The service is intentionally lightweight so that every tier can run on commodity Google Compute Engine VMs while keeping dependencies in the Python standard library plus a minimal set of supporting tools.
+
+\begin{longtable}{p{0.28\linewidth} p{0.32\linewidth} p{0.32\linewidth}}
+\toprule
+\textbf{Component} & \textbf{Role} & \textbf{Notes / Configuration} \\
+\midrule
+Ubuntu 22.04 LTS (image family \texttt{ubuntu-2204-lts}) & Base OS image for all tiers & Provisioned once, snapshotted, and cloned for REST + worker VMs. \\
+\addlinespace
+Python 3.10 + standard library & Runtime for Flask API, worker, and NLP pipeline & Pure-Python FK, TF-IDF, and regex-based NER implementations avoid heavy ML frameworks. \\
+\addlinespace
+Flask 3.0 + Werkzeug & REST API tier & Handles upload/status/download endpoints. Deployed on a single VM tagged \texttt{allow-5000}. \\
+\addlinespace
+Redis 5.x & Queue + metadata store & LPUSH/BRPOP job queue plus job status hashes/key-value pairs. Initially local to REST VM; designed to migrate to Cloud Memorystore. \\
+\addlinespace
+NLP worker scripts (\texttt{worker.py}, \texttt{nlp.py}) & Transform text to decks & Workers consume queue jobs, run FK + lightweight pipeline, and emit CSV output. \\
+\addlinespace
+Deployment tooling (\texttt{setup\_base\_vm.sh}, \texttt{create\_rest\_tier.py}, \texttt{create\_workers.py}) & Provisioning + automation & Creates snapshots, firewall rules, and per-tier VMs with startup scripts. \\
+\addlinespace
+Verification scripts (\texttt{verify\_setup.sh}, \texttt{quick-verify.sh}, \texttt{debug\_rest\_server.sh}) & Diagnostics and smoke tests & Validate gcloud config, VM state, and REST endpoints after deployment. \\
+\addlinespace
+REST VM hardware & \texttt{e2-medium} (2 vCPU, 4 GB RAM) & Hosts Flask + Redis + file storage under \texttt{/tmp}. \\
+\addlinespace
+Worker VMs & Two \texttt{f1-micro} instances (0.2 vCPU, 614 MB RAM) & Each pulls from Redis, processes text in 2--5 seconds, and writes to \texttt{/tmp/outputs}. \\
+\addlinespace
+Storage & Local \texttt{/tmp/uploads}, \texttt{/tmp/outputs} & Designed to migrate to Cloud Storage once durability/scalability is required. \\
+\addlinespace
+Networking & Firewall rule \texttt{allow-5000}, internal SSH & Public TCP/5000 for REST. Internal traffic between tiers over default VPC. \\
+\bottomrule
+\end{longtable}
+
+\section{System Architecture and Interactions}
+
+\subsection*{Architectural Diagram}
+\begin{figure}[h]
+\centering
+\begin{verbatim}
+ +---------+        +--------------------+        +------------------+
+ |  Client |  HTTP  |  REST Tier (Flask) |  LPUSH |     Redis Queue  |
+ | (upload)|------->|  /upload /status   |<------>|  + Job metadata   |
+ +---------+        +--------------------+        +------------------+
+      ^                    |       ^                       |
+      |                    |       |                       |
+      |      download      |       | BRPOP job             |
+      |                    v       |                       v
+ +---------+       +--------------------+        +------------------+
+ |  Client |<------|  REST Tier (CSV)   |        |  Worker Pool     |
+ |download |       +--------------------+        | (f1-micro VMs)   |
+ +---------+                                       | read text, run |
+                                                   | FK + NLP,      |
+                                                   | write /tmp CSV |
+                                                   +----------------+
+\end{verbatim}
+\caption{Logical architecture of the PDF-to-Anki Text Service.}
+\end{figure}
+
+\subsection*{Interaction Narrative}
+\begin{enumerate}[itemsep=0.3em]
+    \item Clients upload \texttt{.txt} files to the Flask REST tier, which stores them under \texttt{/tmp/uploads} and enqueues job IDs in Redis using \texttt{LPUSH}.
+    \item Workers running on separate \texttt{f1-micro} VMs perform blocking pops (\texttt{BRPOP}) against the \texttt{job\_queue}, fetch the associated metadata, and read the text file via SSH-mounted paths or HTTP fetch from the REST VM.
+    \item Each worker executes \texttt{nlp.py}: it calculates Flesch-Kincaid metrics, extracts keywords/entities, and now can emit complex-word CSV decks. Output decks are stored under \texttt{/tmp/outputs}.
+    \item Job status documents inside Redis are updated to reflect \texttt{queued → processing → completed/failed}, enabling the REST tier to serve \texttt{/status/<job\_id>} queries.
+    \item Clients download completed decks through \texttt{/download/<job\_id>}, which streams the CSV from local storage.
+\end{enumerate}
+
+\section{Debugging, Training, and Testing Process}
+
+\textbf{Debugging workflow.}
+\begin{itemize}[itemsep=0.2em]
+    \item The setup script now performs an SSH readiness loop before copying dependency installers, preventing ``connection refused'' errors on brand-new instances.
+    \item \texttt{verify\_setup.sh} and \texttt{quick-verify.sh} assert that required gcloud services, firewall rules, and VMs exist before provisioning additional infrastructure.
+    \item \texttt{debug\_rest\_server.sh} tails Flask logs, restarts the service, and runs health checks, accelerating root-cause analysis when uploads fail or ports are misconfigured.
+    \item Redis metadata allows replaying failed jobs by inspecting the stored file path and rerunning \texttt{worker.py} locally with the same payload.
+\end{itemize}
+
+\textbf{Training/testing mechanisms.}
+\begin{itemize}[itemsep=0.2em]
+    \item The lightweight NLP stack is deterministic and does not require model training; its heuristics (FK, TF-IDF, regex NER) are verified via unit-style scripts such as \texttt{test\_nlp.py} and \texttt{test\_pipeline.py}, along with manual CLI runs (`python nlp.py sample-data/...`).
+    \item The README and deployment docs prescribe sample invocations that act as regression tests: running the pipeline against a fixed snippet, generating CSV output, and validating counts and keywords.
+    \item Workers and the REST tier are smoke-tested with \texttt{quick-verify.sh} to ensure Redis connectivity, queue operations, and HTTP endpoints behave as expected after each deployment.
+\end{itemize}
+
+\section{System Behavior, Capacity, and Bottlenecks}
+
+\textbf{Working system explanation.}
+\begin{itemize}[itemsep=0.2em]
+    \item Single REST VM (\texttt{e2-medium}) handles uploads, metadata queries, and CSV downloads while co-locating Redis for a simple deployment footprint.
+    \item Two worker VMs (\texttt{f1-micro}) pull jobs concurrently; each job reads a text file into memory, runs FK + TF-IDF + regex NER (2--5 seconds per document), generates a deck, and updates Redis status.
+    \item Filesystem storage under \texttt{/tmp/uploads} and \texttt{/tmp/outputs} keeps the architecture simple; future versions can swap in Cloud Storage without changing worker logic.
+\end{itemize}
+
+\textbf{Supported workload.}
+\begin{itemize}[itemsep=0.2em]
+    \item With 2 workers at 2--5 seconds per job, throughput is roughly 20--30 text documents per minute, assuming typical lecture-sized inputs ($<$50 KB).
+    \item The REST tier comfortably handles dozens of concurrent uploads/status requests; CPU utilization remains low because heavy work is offloaded to workers.
+    \item Scaling simply means cloning additional worker VMs from the same snapshot and pointing them at the shared Redis queue.
+\end{itemize}
+
+\textbf{Potential bottlenecks.}
+\begin{itemize}[itemsep=0.2em]
+    \item Local Redis + filesystem make the REST VM a single point of failure; migrating to Cloud Memorystore and Cloud Storage would improve availability and horizontal scalability.
+    \item The \texttt{f1-micro} instances have only 614 MB RAM; extremely large text files (multi-MB) could cause swapping or longer processing times. Input size limits (16 MB uploads, 50,000-character default processing window) mitigate this.
+    \item Network egress from the REST VM could saturate if many large decks are downloaded simultaneously; in practice, CSVs are tiny ($\sim$KB), but heavier workloads would benefit from load-balanced REST instances.
+\end{itemize}
+
+\section{Summary}
+
+The PDF-to-Anki Text Service deliberately prioritizes predictable deployment and datacenter-pattern reinforcement (snapshots, queues, monitoring scripts) over sophisticated NLP. By running everything on small Google Compute Engine VMs with pure-Python tooling, the stack remains easy to debug, test, and reason about while still demonstrating distributed workload orchestration. Scaling paths (Cloud Memorystore, Cloud Storage, load-balanced REST tiers) are documented for future iterations once the coursework requirements are satisfied.
+
+\end{document}

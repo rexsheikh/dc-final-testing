@@ -17,6 +17,7 @@ DISK_SIZE="10GB"
 IMAGE_FAMILY="ubuntu-2204-lts"
 IMAGE_PROJECT="ubuntu-os-cloud"
 REPO_URL="https://github.com/rexsheikh/dc-final-testing.git"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Progress tracking
 TOTAL_STEPS=8
@@ -215,6 +216,9 @@ sudo apt-get install -y \
     curl \
     wget
 
+echo "==> Ensuring python3 pip module is available..."
+sudo python3 -m ensurepip --upgrade || true
+
 echo "==> Configuring Redis..."
 sudo systemctl enable redis-server
 sudo systemctl start redis-server
@@ -227,7 +231,8 @@ sudo mkdir -p /opt/anki-service
 sudo chown $(whoami):$(whoami) /opt/anki-service
 
 echo "==> Installing global Python packages..."
-sudo pip3 install --upgrade pip setuptools wheel
+sudo python3 -m pip install --upgrade pip setuptools wheel
+python3 -m pip --version
 
 echo "==> Dependency installation complete!"
 EOFSCRIPT
@@ -245,6 +250,24 @@ EOFSCRIPT
     
     rm /tmp/install_deps.sh
     log_success "Dependencies installed successfully"
+
+    # Pre-install Python requirements so snapshot includes dependencies
+    REQUIREMENTS_PATH="$SCRIPT_DIR/requirements.txt"
+    if [[ -f "$REQUIREMENTS_PATH" ]]; then
+        log_info "Copying requirements.txt to base VM..."
+        gcloud compute scp "$REQUIREMENTS_PATH" "$BASE_INSTANCE":/tmp/requirements.txt \
+            --zone="$ZONE" \
+            --quiet || error_exit "Failed to copy requirements.txt to VM"
+
+        log_info "Installing Python dependencies on base VM (cached in snapshot)..."
+        gcloud compute ssh "$BASE_INSTANCE" \
+            --zone="$ZONE" \
+            --command="sudo python3 -m pip install -r /tmp/requirements.txt && rm /tmp/requirements.txt" \
+            --quiet || error_exit "Failed to pre-install Python dependencies"
+        log_success "Python requirements installed on base VM"
+    else
+        log_warning "requirements.txt not found at $REQUIREMENTS_PATH; skipping pre-install"
+    fi
 
     # Step 8: Create snapshot
     log_step "Creating snapshot of base VM"
