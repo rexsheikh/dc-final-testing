@@ -1,0 +1,16 @@
+Flask==3.0.0
+redis==5.0.1
+google-api-python-client==2.108.0
+google-auth==2.25.2
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.0
+Werkzeug==3.0.1
+nltk
+spacy
+transformers
+torch
+tensorflow
+flask-restful
+flask-cors
+pandas
+numpy
