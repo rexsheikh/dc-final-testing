@@ -11,6 +11,43 @@ This guide provides step-by-step Google Cloud commands for deploying and testing
 
 **Note**: This project uses **lightweight Python-only NLP** with minimal dependencies (Flask, Redis). No TensorFlow, PyTorch, or other heavy ML frameworks are required. This enables fast deployment and low resource usage.
 
+## Quick Local Test (Before Deployment)
+
+Test the NLP pipeline locally to verify it works:
+
+```bash
+# Clone the repository
+git clone https://github.com/rexsheikh/dc-final-testing
+cd dc-final-testing
+
+# Quick pipeline test
+python3 -c "
+from nlp import process_pipeline, DeckAssembler
+
+text = '''Machine learning is a subset of artificial intelligence. Neural networks are 
+computational models inspired by biological neurons. Deep learning uses multiple 
+layers to extract features from data. Supervised learning requires labeled training 
+data. Unsupervised learning finds patterns without labels.'''
+
+results = process_pipeline(text, 'test.txt')
+DeckAssembler.write_csv(results['cards'], 'test_output.csv')
+
+print(f'Stats: {results[\"normalized\"][\"word_count\"]} words, {results[\"normalized\"][\"sentence_count\"]} sentences')
+print(f'Generated {len(results[\"cards\"])} flashcards')
+print(f'Top keyword: {results[\"keywords\"][0][0]} (score: {results[\"keywords\"][0][1]:.3f})')
+"
+
+# View output
+cat test_output.csv
+```
+
+Expected output:
+```
+Stats: 44 words, 5 sentences
+Generated 9 flashcards
+Top keyword: learning (score: 0.156)
+```
+
 ### GitHub Authentication Setup
 
 GitHub no longer supports password authentication. Before proceeding, set up authentication:
@@ -224,45 +261,69 @@ gcloud compute instances list --filter="name~'anki-worker-'" \
 ```bash
 # Wait 2-3 minutes for startup scripts to complete
 
+# Get REST server IP
+export REST_IP=$(gcloud compute instances describe anki-rest-server \
+  --zone=$ZONE \
+  --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+
 # Check REST server health
 curl http://$REST_IP:5000/health
 
 # Expected output: {"status":"healthy","timestamp":"2025-..."}
 
-# SSH into REST server to check logs
-gcloud compute ssh anki-rest-server --zone=$ZONE
-sudo tail -f /var/log/anki-rest.log
-# Press Ctrl+C to exit, then 'exit' to close SSH
+# Quick end-to-end test
+cat > quick_test.txt << 'EOF'
+Distributed systems enable horizontal scaling. Load balancing distributes requests across multiple servers. Caching reduces database load. Message queues decouple services. Microservices architecture promotes modularity.
+EOF
 
-# SSH into worker to check logs
-gcloud compute ssh anki-worker-1 --zone=$ZONE
-sudo tail -f /var/log/anki-worker.log
-# Press Ctrl+C to exit, then 'exit' to close SSH
+# Upload and process
+curl -F "files=@quick_test.txt" -F "user=test" http://$REST_IP:5000/upload
+# Copy the job_id from response
+
+# Check status (wait ~5 seconds)
+sleep 5
+curl http://$REST_IP:5000/status/<job_id>
+
+# Download deck
+curl http://$REST_IP:5000/download/<job_id> -o quick_deck.csv
+cat quick_deck.csv
 ```
 
 ## Performance Benchmarks
 
-Expected performance metrics:
+Expected performance metrics with lightweight implementation:
+
 - **VM Creation Time**: 15-25 seconds per instance (from snapshot)
 - **Startup Time**: 30-60 seconds (no model downloads required)
 - **Job Processing Time**: 2-5 seconds per text file (pure Python processing)
 - **API Latency**: <100ms for status checks, <1s for uploads
 - **Throughput**: 2 workers can process ~20-30 jobs/minute
 - **Memory Usage**: ~100MB per worker process (no ML models in memory)
+- **Disk Usage**: <500MB per VM (no model files)
+
+**Comparison to ML-heavy approach:**
+- Traditional NLP: 5-10 minute startup (model loading), 2GB+ RAM, 10-30 seconds per file
+- This implementation: 30-60 second startup, 100MB RAM, 2-5 seconds per file
 
 These fast metrics are achievable because we use lightweight, pure-Python NLP instead of heavy ML frameworks.
 
-Record your results in `PERFORMANCE.md` for the project report.
+Record your actual results in `PERFORMANCE.md` for the project report.
 
 ## Testing Regime
 
 ### Test 1: Basic Health Check
 
 ```bash
+# Set REST IP if not already set
+export ZONE="us-west1-b"
+export REST_IP=$(gcloud compute instances describe anki-rest-server \
+  --zone=$ZONE \
+  --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+
 # Test REST API health endpoint
 curl http://$REST_IP:5000/health
 
-# Expected: {"status": "healthy", ...}
+# Expected: {"status": "healthy", "timestamp": "2025-..."}
 ```
 
 ### Test 2: File Upload

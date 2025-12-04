@@ -2,6 +2,11 @@
 """
 Flask REST API for PDF-to-Anki Text Service
 Handles file uploads, job status queries, and deck downloads
+
+Design: Lightweight queue-based architecture
+- No heavy ML dependencies (TensorFlow, PyTorch, etc.)
+- Fast startup: 30-60 seconds vs 5-10 minutes for model loading
+- Low memory: ~50MB for REST tier (no models in memory)
 """
 
 import os

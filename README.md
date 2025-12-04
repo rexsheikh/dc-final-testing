@@ -33,6 +33,28 @@ This project intentionally uses **lightweight, pure-Python NLP** instead of heav
 
 All processing uses Python 3 standard library + basic data structures.
 
+## Quick Test (Local)
+
+Test the NLP pipeline locally before deploying:
+
+```bash
+# Test with sample text
+python3 -c "
+from nlp import process_pipeline, DeckAssembler
+
+text = '''Machine learning is a subset of artificial intelligence. Neural networks are 
+computational models inspired by biological neurons. Deep learning uses multiple 
+layers to extract features from data.'''
+
+results = process_pipeline(text, 'test.txt')
+DeckAssembler.write_csv(results['cards'], 'output.csv')
+print(f'Generated {len(results[\"cards\"])} flashcards')
+"
+
+# View the output
+cat output.csv
+```
+
 ## Deployment
 
 ### 1. Create REST Tier VM
@@ -87,14 +109,24 @@ Werkzeug==3.0.1        # Flask utilities
 ## Usage Example
 
 ```bash
-# Upload a text file
-curl -F "files=@lecture.txt" http://<REST_IP>:5000/upload
+# Get REST server IP
+export REST_IP=$(gcloud compute instances describe anki-rest-server \
+  --zone=us-west1-b \
+  --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
 
-# Check status
-curl http://<REST_IP>:5000/status/<job_id>
+# Upload a text file
+curl -F "files=@lecture.txt" -F "user=student" http://$REST_IP:5000/upload
+
+# Response: {"jobs":[{"job_id":"abc-123","filename":"lecture.txt"}]}
+
+# Check status (wait ~5 seconds for processing)
+curl http://$REST_IP:5000/status/abc-123
 
 # Download deck when completed
-curl http://<REST_IP>:5000/download/<job_id> -o deck.csv
+curl http://$REST_IP:5000/download/abc-123 -o deck.csv
+
+# View the deck
+cat deck.csv
 ```
 
 ## Repository
@@ -116,3 +148,9 @@ Code repo: https://github.com/rexsheikh/dc-final-testing
 - **API Latency**: <100ms for status checks
 
 These metrics are achievable because we avoid heavy ML dependencies.
+
+## Documentation
+
+- **DEPLOYMENT.md**: Complete deployment guide with GCP commands
+- **ARCHITECTURE.md**: Design decisions and system architecture
+- **QUICK_FIX.md**: Troubleshooting GitHub authentication issues
