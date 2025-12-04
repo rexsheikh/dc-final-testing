@@ -456,6 +456,101 @@ rm -f test_lecture.txt lecture2.txt lecture3.txt deck.csv upload_test.sh
 
 ## Troubleshooting
 
+### Issue: "Failed to connect to port 5000" after VM creation
+
+**Symptoms:** 
+- Ping works: `ping $REST_IP` succeeds
+- Curl fails: `curl http://$REST_IP:5000/health` connection refused
+
+**Diagnosis:**
+
+```bash
+# Quick diagnostic script
+chmod +x debug_rest_server.sh
+./debug_rest_server.sh
+
+# Or manual checks:
+# 1. Check if startup script is still running (wait 2-3 minutes)
+gcloud compute ssh anki-rest-server --zone=$ZONE --command \
+  "sudo journalctl -u google-startup-scripts.service | tail -20"
+
+# 2. Check if Flask process exists
+gcloud compute ssh anki-rest-server --zone=$ZONE --command \
+  "ps aux | grep app.py"
+
+# 3. Check application logs
+gcloud compute ssh anki-rest-server --zone=$ZONE --command \
+  "sudo tail -50 /var/log/anki-rest.log"
+```
+
+**Solutions:**
+
+**Solution A: Wait for startup script to complete**
+```bash
+# Startup scripts take 2-5 minutes, especially on first run
+# Monitor progress:
+gcloud compute ssh anki-rest-server --zone=$ZONE --command \
+  "sudo journalctl -u google-startup-scripts.service -f"
+# Press Ctrl+C when you see "Finished startup scripts"
+```
+
+**Solution B: GitHub authentication failed (most common)**
+
+If the startup script failed to clone the repository:
+
+```bash
+# SSH into the VM
+gcloud compute ssh anki-rest-server --zone=$ZONE
+
+# Check if repo exists
+ls -la /opt/anki-service
+# If missing, clone manually:
+
+cd /opt
+sudo rm -rf anki-service  # Remove if exists but empty
+sudo git clone https://github.com/rexsheikh/dc-final-testing anki-service
+# Enter your GitHub username and Personal Access Token when prompted
+
+cd anki-service
+sudo pip3 install -r requirements.txt
+
+# Start Flask
+nohup python3 app.py &>/var/log/anki-rest.log &
+
+# Verify it's running
+sleep 2
+curl http://localhost:5000/health
+
+# Should return: {"status":"healthy",...}
+exit
+```
+
+**Solution C: Dependencies missing**
+```bash
+gcloud compute ssh anki-rest-server --zone=$ZONE
+
+cd /opt/anki-service
+sudo pip3 install -r requirements.txt
+
+# Restart Flask
+sudo pkill -f "python3 app.py"
+nohup python3 app.py &>/var/log/anki-rest.log &
+exit
+```
+
+**Solution D: Check firewall tag is applied**
+```bash
+# Verify instance has allow-5000 tag
+gcloud compute instances describe anki-rest-server --zone=$ZONE \
+  --format="get(tags.items)"
+
+# Should include: allow-5000
+# If missing, add it:
+gcloud compute instances add-tags anki-rest-server \
+  --zone=$ZONE \
+  --tags=allow-5000
+```
+
 ### Issue: REST API not responding
 
 ```bash
@@ -505,13 +600,3 @@ sudo pip3 install -r requirements.txt
 nohup python3 app.py &>/var/log/anki-rest.log &
 exit
 ```
-
-## Performance Benchmarks
-
-Expected performance metrics:
-- **VM Creation Time**: 15-25 seconds per instance (from snapshot)
-- **Job Processing Time**: 5-15 seconds per text file (depending on length)
-- **API Latency**: <100ms for status checks, <1s for uploads
-- **Throughput**: 2 workers can process ~10 jobs/minute
-
-Record your results in `PERFORMANCE.md` for the project report.

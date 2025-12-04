@@ -123,6 +123,7 @@ def create_rest_instance(
     machine_type = f"zones/{zone}/machineTypes/{machine_type_short}"
     
     # REST tier startup script: clone repo, install deps, start Flask
+    # NOTE: Repository must be PUBLIC or you need to configure GitHub auth
     startup_script = f"""#!/usr/bin/env bash
 set -euxo pipefail
 
@@ -130,9 +131,19 @@ set -euxo pipefail
 apt-get update
 apt-get install -y python3-pip git redis-tools
 
-# Clone repository
+# Clone repository (requires public repo or auth configured)
 cd /opt
-git clone {REPO_URL} anki-service
+
+# Try to clone - if it fails, the repo might be private
+if ! git clone {REPO_URL} anki-service 2>&1 | tee /var/log/git-clone.log; then
+    echo "ERROR: Failed to clone repository. Repository might be private." | tee -a /var/log/git-clone.log
+    echo "To fix: Make repo public at https://github.com/rexsheikh/dc-final-testing/settings" | tee -a /var/log/git-clone.log
+    echo "Or manually clone after VM creation with:" | tee -a /var/log/git-clone.log
+    echo "  gcloud compute ssh {name} --zone={zone}" | tee -a /var/log/git-clone.log
+    echo "  cd /opt && sudo git clone {REPO_URL} anki-service" | tee -a /var/log/git-clone.log
+    exit 1
+fi
+
 cd anki-service
 
 # Install Python dependencies

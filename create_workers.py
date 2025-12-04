@@ -131,9 +131,16 @@ set -euxo pipefail
 apt-get update
 apt-get install -y python3-pip git redis-tools
 
-# Clone repository
+# Clone repository (requires public repo or auth configured)
 cd /opt
-git clone {REPO_URL} anki-service
+
+# Try to clone - if it fails, the repo might be private
+if ! git clone {REPO_URL} anki-service 2>&1 | tee /var/log/git-clone.log; then
+    echo "ERROR: Failed to clone repository. Repository might be private." | tee -a /var/log/git-clone.log
+    echo "To fix: Make repo public or manually clone with auth" | tee -a /var/log/git-clone.log
+    exit 1
+fi
+
 cd anki-service
 
 # Install Python dependencies
