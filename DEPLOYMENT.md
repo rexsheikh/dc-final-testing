@@ -9,6 +9,8 @@ This guide provides step-by-step Google Cloud commands for deploying and testing
 3. Project created with billing enabled
 4. **GitHub authentication configured** (see below)
 
+**Note**: This project uses **lightweight Python-only NLP** with minimal dependencies (Flask, Redis). No TensorFlow, PyTorch, or other heavy ML frameworks are required. This enables fast deployment and low resource usage.
+
 ### GitHub Authentication Setup
 
 GitHub no longer supports password authentication. Before proceeding, set up authentication:
@@ -237,6 +239,20 @@ gcloud compute ssh anki-worker-1 --zone=$ZONE
 sudo tail -f /var/log/anki-worker.log
 # Press Ctrl+C to exit, then 'exit' to close SSH
 ```
+
+## Performance Benchmarks
+
+Expected performance metrics:
+- **VM Creation Time**: 15-25 seconds per instance (from snapshot)
+- **Startup Time**: 30-60 seconds (no model downloads required)
+- **Job Processing Time**: 2-5 seconds per text file (pure Python processing)
+- **API Latency**: <100ms for status checks, <1s for uploads
+- **Throughput**: 2 workers can process ~20-30 jobs/minute
+- **Memory Usage**: ~100MB per worker process (no ML models in memory)
+
+These fast metrics are achievable because we use lightweight, pure-Python NLP instead of heavy ML frameworks.
+
+Record your results in `PERFORMANCE.md` for the project report.
 
 ## Testing Regime
 
