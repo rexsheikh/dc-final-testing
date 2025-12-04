@@ -44,6 +44,26 @@ log_info() {
     echo -e "${BLUE}ℹ${NC} $1"
 }
 
+wait_for_ssh() {
+    local max_attempts=${1:-10}
+    local delay=${2:-10}
+
+    log_info "Waiting for SSH connectivity to $BASE_INSTANCE (up to $((max_attempts * delay))s)..."
+    for attempt in $(seq 1 "$max_attempts"); do
+        if gcloud compute ssh "$BASE_INSTANCE" \
+            --zone="$ZONE" \
+            --command="echo ssh-ready" \
+            --quiet >/dev/null 2>&1; then
+            log_success "SSH reachable on attempt $attempt"
+            return 0
+        fi
+        log_info "SSH not ready (attempt $attempt/$max_attempts). Retrying in ${delay}s..."
+        sleep "$delay"
+    done
+
+    error_exit "SSH still unavailable after $max_attempts attempts"
+}
+
 # Error handler
 error_exit() {
     log_error "$1"
@@ -166,6 +186,9 @@ main() {
     else
         CURRENT_STEP=$((CURRENT_STEP + 1))
     fi
+
+    # Ensure SSH is available before attempting SCP/SSH operations
+    wait_for_ssh
 
     # Step 7: Install dependencies on VM
     log_step "Installing dependencies on base VM"
