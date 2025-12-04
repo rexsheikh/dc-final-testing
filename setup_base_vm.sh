@@ -262,7 +262,7 @@ EOFSCRIPT
         log_info "Installing Python dependencies on base VM (cached in snapshot)..."
         gcloud compute ssh "$BASE_INSTANCE" \
             --zone="$ZONE" \
-            --command="sudo python3 -m pip install -r /tmp/requirements.txt && rm /tmp/requirements.txt" \
+            --command="sudo python3 -m pip install --no-cache-dir --ignore-installed -r /tmp/requirements.txt && rm /tmp/requirements.txt" \
             --quiet || error_exit "Failed to pre-install Python dependencies"
         log_success "Python requirements installed on base VM"
     else
