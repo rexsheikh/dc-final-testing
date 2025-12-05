@@ -132,25 +132,30 @@ apt-get update
 apt-get install -y python3-pip git redis-tools
 
 # Clone repository (requires public repo or auth configured)
+VENV_PATH="/opt/anki-venv"
 cd /opt
+rm -rf anki-service
 
-# Try to clone - if it fails, the repo might be private
 if ! git clone {REPO_URL} anki-service 2>&1 | tee /var/log/git-clone.log; then
     echo "ERROR: Failed to clone repository. Repository might be private." | tee -a /var/log/git-clone.log
-    echo "To fix: Make repo public at https://github.com/rexsheikh/dc-final-testing/settings" | tee -a /var/log/git-clone.log
-    echo "Or manually clone after VM creation with:" | tee -a /var/log/git-clone.log
-    echo "  gcloud compute ssh {name} --zone={zone}" | tee -a /var/log/git-clone.log
-    echo "  cd /opt && sudo git clone {REPO_URL} anki-service" | tee -a /var/log/git-clone.log
     exit 1
 fi
 
 cd anki-service
 
+# Activate virtual environment (pre-baked in snapshot)
+if [ -d "$VENV_PATH" ]; then
+    source "$VENV_PATH/bin/activate"
+else
+    python3 -m venv "$VENV_PATH"
+    source "$VENV_PATH/bin/activate"
+fi
+
 # Install Python dependencies
-pip3 install -r requirements.txt
+pip install -r requirements.txt
 
 # Start Flask REST API
-nohup python3 app.py &>/var/log/anki-rest.log &
+nohup python app.py &>/var/log/anki-rest.log &
 """
 
     body = {

@@ -18,6 +18,7 @@ IMAGE_FAMILY="ubuntu-2204-lts"
 IMAGE_PROJECT="ubuntu-os-cloud"
 REPO_URL="https://github.com/rexsheikh/dc-final-testing.git"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_PATH="/opt/anki-venv"
 
 # Progress tracking
 TOTAL_STEPS=8
@@ -203,6 +204,8 @@ cat > /tmp/install_deps.sh << 'EOFSCRIPT'
 #!/usr/bin/env bash
 set -euxo pipefail
 
+VENV_PATH="/opt/anki-venv"
+
 echo "==> Updating system packages..."
 sudo apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
@@ -228,17 +231,13 @@ sudo systemctl start redis-server
 echo "==> Testing Redis connection..."
 redis-cli ping
 
-echo "==> Creating application directory..."
-sudo mkdir -p /opt/anki-service
-sudo chown $(whoami):$(whoami) /opt/anki-service
-
 echo "==> Installing global Python packages..."
 sudo python3 -m pip install --upgrade pip setuptools wheel
 python3 -m pip --version
 
 echo "==> Creating virtual environment..."
-python3 -m venv /opt/anki-service/venv
-source /opt/anki-service/venv/bin/activate
+python3 -m venv "$VENV_PATH"
+source "$VENV_PATH/bin/activate"
 pip install --upgrade pip setuptools wheel
 pip --version
 
@@ -268,10 +267,10 @@ EOFSCRIPT
             --quiet || error_exit "Failed to copy requirements.txt to VM"
 
         log_info "Installing Python dependencies on base VM (cached in snapshot)..."
-    gcloud compute ssh "$BASE_INSTANCE" \
-        --zone="$ZONE" \
-        --command="source /opt/anki-service/venv/bin/activate && pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt" \
-        --quiet || error_exit "Failed to pre-install Python dependencies"
+        gcloud compute ssh "$BASE_INSTANCE" \
+            --zone="$ZONE" \
+            --command="source /opt/anki-venv/bin/activate && pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt" \
+            --quiet || error_exit "Failed to pre-install Python dependencies"
         log_success "Python requirements installed on base VM"
     else
         log_warning "requirements.txt not found at $REQUIREMENTS_PATH; skipping pre-install"
