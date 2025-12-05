@@ -17,7 +17,7 @@ import redis
 from datetime import datetime
 from urllib.request import Request, urlopen
 from urllib.error import URLError
-from nlp import process_pipeline, DeckAssembler
+from nlp import flesch_kincaid_analysis, write_complex_word_deck
 
 METADATA_REDIS_URL = "http://metadata.google.internal/computeMetadata/v1/instance/attributes/rest-internal-ip"
 METADATA_SHARED_ROOT_URL = "http://metadata.google.internal/computeMetadata/v1/instance/attributes/shared-root"
@@ -92,23 +92,26 @@ def process_text_content(text: str, filename: str, job_id: str) -> str:
     Process text content through lightweight NLP pipeline:
     1. Text normalization (regex-based)
     2. Summarization (extractive, word frequency)
-    3. TF-IDF keyword extraction (manual calculation)
-    4. Named entity recognition (pattern-based)
-    5. Generate Anki CSV deck
+    3. Flesch-Kincaid complexity analysis
+    4. Extract most difficult words for study
+    5. Generate Anki CSV deck with complex words only
     
     Total processing time: 2-5 seconds (no ML frameworks)
     Returns path to output CSV file
     """
     print(f"Processing content for file: {filename}", flush=True)
     
-    # Run NLP pipeline (lightweight, pure Python)
-    results = process_pipeline(text, filename)
+    # Run Flesch-Kincaid analysis to extract complex words
+    fk_results = flesch_kincaid_analysis(text)
+    complex_words = fk_results['complex_words']
     
-    # Generate output CSV
+    print(f"Found {len(complex_words)} complex words (grade level: {fk_results['grade_level']:.1f})", flush=True)
+    
+    # Generate output CSV with complex words only
     output_path = os.path.join(OUTPUT_FOLDER, f"{job_id}_deck.csv")
-    DeckAssembler.write_csv(results['cards'], output_path)
+    write_complex_word_deck(complex_words, output_path)
     
-    print(f"Generated deck with {len(results['cards'])} cards: {output_path}", flush=True)
+    print(f"Generated deck with {len(complex_words)} complex words: {output_path}", flush=True)
     return output_path
 
 
