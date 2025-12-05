@@ -38,24 +38,31 @@ for worker in "${worker_list[@]}"; do
   log "Worker $worker systemd service file"
   gcloud compute ssh "$worker" --zone="$ZONE" --command "echo '--- Service Environment Lines ---' && grep '^Environment=' /etc/systemd/system/anki-worker.service 2>/dev/null || echo 'Service file not found'"
 
+  log "Worker $worker code version check"
+  gcloud compute ssh "$worker" --zone="$ZONE" --command "echo '--- Checking for diagnostic logging in worker.py ---' && grep -n 'Worker starting with configuration' /opt/anki-service/worker.py || echo 'Diagnostic logging NOT FOUND (old code)'"
+
   log "Worker $worker metadata server values"
   gcloud compute ssh "$worker" --zone="$ZONE" --command "echo 'rest-internal-ip:' && curl -s -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/rest-internal-ip || echo 'N/A'; echo 'shared-root:' && curl -s -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/shared-root || echo 'N/A'"
 
   log "Worker $worker environment (from running process)"
-  gcloud compute ssh "$worker" --zone="$ZONE" --command "python3 - <<'PY'
-import os
-print('REDIS_HOST env:', os.environ.get('REDIS_HOST'))
-print('SHARED_STORAGE_ROOT:', os.environ.get('SHARED_STORAGE_ROOT'))
-print('SHARED_UPLOAD_FOLDER:', os.environ.get('SHARED_UPLOAD_FOLDER'))
-print('SHARED_OUTPUT_FOLDER:', os.environ.get('SHARED_OUTPUT_FOLDER'))
-PY"
+  gcloud compute ssh "$worker" --zone="$ZONE" --command "
+# Get PID of worker process
+WORKER_PID=\$(pgrep -f 'python.*worker.py' | head -1)
+if [ -n \"\$WORKER_PID\" ]; then
+  echo \"Worker PID: \$WORKER_PID\"
+  echo '--- Environment of actual worker process ---'
+  sudo cat /proc/\$WORKER_PID/environ | tr '\\0' '\\n' | grep -E 'REDIS_HOST|SHARED_' || echo 'No matching env vars found'
+else
+  echo 'Worker process not found'
+fi
+"
 
   log "Worker $worker shared storage"
   gcloud compute ssh "$worker" --zone="$ZONE" --command "ls -lah /mnt/shared || true; ls -lah /mnt/shared/uploads || true"
 
   log "Worker $worker process + recent log"
   gcloud compute ssh "$worker" --zone="$ZONE" --command \
-    "ps -ef | grep -v grep | grep worker.py || echo 'No worker process'; echo '--- Last 40 lines of log ---'; sudo tail -n 40 /var/log/anki-worker.log || echo 'No log'"
+    "ps -ef | grep -v grep | grep worker.py || echo 'No worker process'; echo '--- Last 60 lines of log ---'; sudo tail -n 60 /var/log/anki-worker.log || echo 'No log'"
 done
 
 log "REST systemd status"
