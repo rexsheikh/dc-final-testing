@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-NLP Worker Process for PDF-to-Anki Service
+NLP Worker Process for Text-to-Anki Service
 Pulls jobs from Redis queue and processes text files through NLP pipeline
 
 Performance characteristics:

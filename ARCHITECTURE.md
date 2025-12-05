@@ -2,7 +2,7 @@
 
 ## Overview
 
-The PDF-to-Anki Text Service is a distributed system for converting text documents into Anki flashcard decks. The architecture emphasizes **datacenter-scale computing concepts** over NLP sophistication.
+The Text-to-Anki Service is a distributed system for converting text documents into Anki flashcard decks. The architecture emphasizes **datacenter-scale computing concepts** over NLP sophistication.
 
 ## Core Design Principles
 

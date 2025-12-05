@@ -1,4 +1,4 @@
-# PDF-to-Anki Text Service
+# Text-to-Anki Service
 
 A cloud-hosted Flask service that converts text documents into Anki flashcard decks using lightweight NLP techniques.
 

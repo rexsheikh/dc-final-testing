@@ -1,4 +1,4 @@
-# Deployment Guide - PDF-to-Anki Text Service
+# Deployment Guide - Text-to-Anki Service
 
 This guide provides step-by-step Google Cloud commands for deploying and testing the service.
 

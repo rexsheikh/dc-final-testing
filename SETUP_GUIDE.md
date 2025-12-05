@@ -1,6 +1,6 @@
-# Setup Guide - PDF-to-Anki Text Service
+# Setup Guide - Text-to-Anki Service
 
-This guide walks you through the initial setup of the PDF-to-Anki service infrastructure.
+This guide walks you through the initial setup of the Text-to-Anki service infrastructure.
 
 ## Quick Start
 
@@ -197,7 +197,7 @@ cd final-project
 **Sample output:**
 ```
 ======================================
-PDF-to-Anki Service - Base VM Setup
+Text-to-Anki Service - Base VM Setup
 ======================================
 
 ℹ Project: substantial-art-471117-v1
@@ -235,7 +235,7 @@ After setup completes, verify everything is configured:
 **Expected output:**
 ```
 ======================================
-PDF-to-Anki Setup Verification
+Text-to-Anki Setup Verification
 ======================================
 
 [CHECK] Checking gcloud CLI installation

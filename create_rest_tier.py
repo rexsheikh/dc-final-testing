@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Create REST tier VM for PDF-to-Anki service
+Create REST tier VM for Text-to-Anki service
 Single instance running Flask API server
 Based on lab5/part2_updated.py
 """
@@ -166,8 +166,11 @@ fi
 # Install Python dependencies
 pip install -r requirements.txt
 
-# Start Flask REST API
-nohup python app.py &>/var/log/anki-rest.log &
+# Start Flask REST API with explicit environment variables
+env SHARED_STORAGE_ROOT="$SHARED_ROOT" \
+    SHARED_UPLOAD_FOLDER="$SHARED_ROOT/uploads" \
+    SHARED_OUTPUT_FOLDER="$SHARED_ROOT/outputs" \
+    nohup python app.py &>/var/log/anki-rest.log &
 """
 
     body = {

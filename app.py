@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Flask REST API for PDF-to-Anki Text Service
+Flask REST API for Text-to-Anki Service
 Handles file uploads, job status queries, and deck downloads
 
 Design: Lightweight queue-based architecture
@@ -65,7 +65,7 @@ DASHBOARD_TEMPLATE = """
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PDF-to-Anki Text Service</title>
+  <title>Text-to-Anki Service</title>
   <style>
     body { font-family: system-ui, -apple-system, BlinkMacSystemFont, Arial, sans-serif; margin: 0; padding: 0; background: #f6f8fb; color: #111; }
     header { background: #1f2933; color: #fff; padding: 1.5rem 1rem; }
@@ -94,7 +94,7 @@ DASHBOARD_TEMPLATE = """
 </head>
 <body>
   <header>
-    <h1>PDF-to-Anki Text Service</h1>
+    <h1>Text-to-Anki Service</h1>
     <p class="muted">Upload .txt files to extract complex words and download ready-to-import decks.</p>
   </header>
   <main>

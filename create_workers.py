@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Create worker VMs for PDF-to-Anki service
+Create worker VMs for Text-to-Anki service
 Clones 2 worker machines from a source instance using snapshot approach
 Based on lab5/part2_updated.py
 """
@@ -173,13 +173,19 @@ if [ -n "$REST_IP" ]; then
     export REDIS_HOST="$REST_IP"
 fi
 
-# Start worker process
+# Start worker process with explicit environment variables
 LOG_FILE=/var/log/anki-worker.log
 if [ ! -f "$LOG_FILE" ]; then
     sudo touch "$LOG_FILE"
     sudo chown $(whoami):$(whoami) "$LOG_FILE"
 fi
-nohup python worker.py &>> "$LOG_FILE" &
+
+# Launch worker with environment variables explicitly set
+env SHARED_STORAGE_ROOT="$SHARED_ROOT" \
+    SHARED_UPLOAD_FOLDER="$SHARED_ROOT/uploads" \
+    SHARED_OUTPUT_FOLDER="$SHARED_ROOT/outputs" \
+    REDIS_HOST="$REST_IP" \
+    nohup python worker.py &>> "$LOG_FILE" &
 """
 
     body = {

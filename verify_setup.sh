@@ -156,7 +156,7 @@ print_summary() {
 
 main() {
     echo -e "${GREEN}======================================${NC}"
-    echo -e "${GREEN}PDF-to-Anki Setup Verification${NC}"
+    echo -e "${GREEN}Text-to-Anki Setup Verification${NC}"
     echo -e "${GREEN}======================================${NC}"
     echo ""
     

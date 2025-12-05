@@ -80,7 +80,7 @@ command_exists() {
 # Main setup script
 main() {
     echo -e "${GREEN}======================================${NC}"
-    echo -e "${GREEN}PDF-to-Anki Service - Base VM Setup${NC}"
+    echo -e "${GREEN}Text-to-Anki Service - Base VM Setup${NC}"
     echo -e "${GREEN}======================================${NC}"
     echo ""
     log_info "Project: $PROJECT_ID"
