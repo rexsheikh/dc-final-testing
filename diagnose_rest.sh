@@ -35,11 +35,14 @@ run_remote() {
         --zone="$ZONE" \
         --command="
 set -euxo pipefail
+echo '=== System Info ==='
 echo 'Python version:'
 python3 -V
 echo 'pip info:'
 python3 -m pip -V || true
-echo 'Probe Flask import:'
+
+echo ''
+echo '=== Flask Installation ==='
 python3 - <<'PY'
 try:
     import flask
@@ -48,21 +51,62 @@ try:
 except Exception as exc:
     print('flask import failed:', exc)
 PY
+
+echo ''
+echo '=== Repository State ==='
 echo 'Check repo path:'
-ls -l /opt/anki-service || true
+ls -l /home/rexsheikh/anki-service || true
 echo 'Is app.py present?'
-ls -l /opt/anki-service/app.py || true
+ls -l /home/rexsheikh/anki-service/app.py || true
+echo 'Latest commit:'
+cd /home/rexsheikh/anki-service && git log -1 --oneline || true
+
+echo ''
+echo '=== Systemd Service Status ==='
+sudo systemctl status anki-rest.service --no-pager || echo 'anki-rest.service not found or inactive'
+
+echo ''
+echo '=== Service Configuration ==='
+echo 'Service file:'
+sudo cat /etc/systemd/system/anki-rest.service || true
+
+echo ''
+echo '=== Process Info ==='
 echo 'Active Flask processes (python app.py):'
-ps -ef | grep '[p]ython3 app.py' || echo 'No python3 app.py process found'
-echo 'Listening sockets on port $REST_PORT:'
-sudo lsof -iTCP:$REST_PORT -sTCP:LISTEN || echo 'Nothing listening on port $REST_PORT'
-echo 'Local curl to /health:'
+ps aux | grep '[p]ython.*app.py' || echo 'No python app.py process found'
+
+echo ''
+echo '=== Network Status ==='
+echo 'Listening sockets on port 5000:'
+sudo lsof -iTCP:5000 -sTCP:LISTEN || echo 'Nothing listening on port 5000'
+echo 'Firewall status:'
+sudo ufw status || echo 'ufw not configured'
+
+echo ''
+echo '=== Local Connectivity Test ==='
 set +e
-curl -v --max-time 5 http://127.0.0.1:$REST_PORT/health
+curl -v --max-time 5 http://127.0.0.1:5000/health
 echo 'curl exit code:' \$?
 set -e
-echo 'Last 60 lines of /var/log/anki-rest.log:'
-sudo tail -n 60 /var/log/anki-rest.log || true
+
+echo ''
+echo '=== Service Logs (last 60 lines) ==='
+sudo journalctl -u anki-rest.service -n 60 --no-pager || echo 'No logs available'
+
+echo ''
+echo '=== Environment Variables from Process ==='
+REST_PID=\$(pgrep -f 'python.*app.py' | head -1)
+if [[ -n \"\$REST_PID\" ]]; then
+    echo \"Process PID: \$REST_PID\"
+    echo 'Environment variables:'
+    sudo cat /proc/\$REST_PID/environ | tr '\\0' '\\n' | grep -E 'REDIS|SHARED|PYTHON' || echo 'No matching env vars'
+else
+    echo 'No REST process running'
+fi
+
+echo ''
+echo '=== Redis Connectivity ==='
+python3 -c 'import redis; r=redis.Redis(host=\"localhost\", port=6379); print(\"Redis PING:\", r.ping())' || echo 'Redis connection failed'
 " || {
         echo "Remote diagnostics failed"
     }
