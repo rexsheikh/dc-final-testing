@@ -32,7 +32,13 @@ glog_rest_dir(){
 glog_rest_dir
 
 for worker in "${worker_list[@]}"; do
-  log "Worker $worker environment"
+  log "Worker $worker systemd status"
+  gcloud compute ssh "$worker" --zone="$ZONE" --command "systemctl status anki-worker --no-pager || echo 'Systemd service not found (old deployment?)'"
+
+  log "Worker $worker metadata server values"
+  gcloud compute ssh "$worker" --zone="$ZONE" --command "echo 'rest-internal-ip:' && curl -s -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/rest-internal-ip || echo 'N/A'; echo 'shared-root:' && curl -s -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/shared-root || echo 'N/A'"
+
+  log "Worker $worker environment (from running process)"
   gcloud compute ssh "$worker" --zone="$ZONE" --command "python3 - <<'PY'
 import os
 print('REDIS_HOST env:', os.environ.get('REDIS_HOST'))
@@ -44,10 +50,13 @@ PY"
   log "Worker $worker shared storage"
   gcloud compute ssh "$worker" --zone="$ZONE" --command "ls -lah /mnt/shared || true; ls -lah /mnt/shared/uploads || true"
 
-  log "Worker $worker process + log"
+  log "Worker $worker process + recent log"
   gcloud compute ssh "$worker" --zone="$ZONE" --command \
-    "ps -ef | grep -v grep | grep worker.py || echo 'No worker process'; sudo tail -n 40 /var/log/anki-worker.log || echo 'No log'"
+    "ps -ef | grep -v grep | grep worker.py || echo 'No worker process'; echo '--- Last 40 lines of log ---'; sudo tail -n 40 /var/log/anki-worker.log || echo 'No log'"
 done
+
+log "REST systemd status"
+gcloud compute ssh "$REST_INSTANCE" --zone="$ZONE" --command "systemctl status anki-rest --no-pager || echo 'Systemd service not found (old deployment?)'"
 
 log "REST Flask log"
 gcloud compute ssh "$REST_INSTANCE" --zone="$ZONE" --command "sudo tail -n 60 /var/log/anki-rest.log"

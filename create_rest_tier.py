@@ -166,11 +166,47 @@ fi
 # Install Python dependencies
 pip install -r requirements.txt
 
-# Start Flask REST API with explicit environment variables
-env SHARED_STORAGE_ROOT="$SHARED_ROOT" \
-    SHARED_UPLOAD_FOLDER="$SHARED_ROOT/uploads" \
-    SHARED_OUTPUT_FOLDER="$SHARED_ROOT/outputs" \
-    nohup python app.py &>/var/log/anki-rest.log &
+# Fetch metadata for environment configuration
+SHARED_ROOT=$(curl -s -H 'Metadata-Flavor: Google' \
+    "http://metadata.google.internal/computeMetadata/v1/instance/attributes/shared-root" \
+    || echo "/mnt/shared")
+
+# Create shared directories
+mkdir -p "$SHARED_ROOT/uploads" "$SHARED_ROOT/outputs"
+chown -R $(whoami):$(whoami) "$SHARED_ROOT"
+
+# Create systemd service for Flask REST API
+cat > /etc/systemd/system/anki-rest.service <<EOF
+[Unit]
+Description=Anki REST API Service
+After=network-online.target redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/anki-service
+Environment="SHARED_STORAGE_ROOT=$SHARED_ROOT"
+Environment="SHARED_UPLOAD_FOLDER=$SHARED_ROOT/uploads"
+Environment="SHARED_OUTPUT_FOLDER=$SHARED_ROOT/outputs"
+ExecStart=$VENV_PATH/bin/python /opt/anki-service/app.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/anki-rest.log
+StandardError=append:/var/log/anki-rest.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start service
+systemctl daemon-reload
+systemctl enable anki-rest
+systemctl start anki-rest
+
+# Log startup status
+echo "REST API service started at $(date)" >> /var/log/anki-rest.log
+systemctl status anki-rest --no-pager || true
 """
 
     body = {
@@ -204,6 +240,9 @@ env SHARED_STORAGE_ROOT="$SHARED_ROOT" \
         "metadata": {
             "items": [
                 {"key": "startup-script", "value": startup_script},
+                {"key": "shared-root", "value": "/mnt/shared"},
+                {"key": "shared-upload", "value": "/mnt/shared/uploads"},
+                {"key": "shared-output", "value": "/mnt/shared/outputs"},
             ]
         },
     }

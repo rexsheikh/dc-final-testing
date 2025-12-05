@@ -166,26 +166,52 @@ fi
 # Install Python dependencies
 pip install -r requirements.txt
 
+# Fetch metadata for environment configuration
 REST_IP=$(curl -s -H 'Metadata-Flavor: Google' \
     "http://metadata.google.internal/computeMetadata/v1/instance/attributes/rest-internal-ip" \
-    || true)
-if [ -n "$REST_IP" ]; then
-    export REDIS_HOST="$REST_IP"
-fi
+    || echo "localhost")
 
-# Start worker process with explicit environment variables
-LOG_FILE=/var/log/anki-worker.log
-if [ ! -f "$LOG_FILE" ]; then
-    sudo touch "$LOG_FILE"
-    sudo chown $(whoami):$(whoami) "$LOG_FILE"
-fi
+SHARED_ROOT=$(curl -s -H 'Metadata-Flavor: Google' \
+    "http://metadata.google.internal/computeMetadata/v1/instance/attributes/shared-root" \
+    || echo "/mnt/shared")
 
-# Launch worker with environment variables explicitly set
-env SHARED_STORAGE_ROOT="$SHARED_ROOT" \
-    SHARED_UPLOAD_FOLDER="$SHARED_ROOT/uploads" \
-    SHARED_OUTPUT_FOLDER="$SHARED_ROOT/outputs" \
-    REDIS_HOST="$REST_IP" \
-    nohup python worker.py &>> "$LOG_FILE" &
+# Create shared directories
+mkdir -p "$SHARED_ROOT/uploads" "$SHARED_ROOT/outputs"
+chown -R $(whoami):$(whoami) "$SHARED_ROOT"
+
+# Create systemd service for worker
+cat > /etc/systemd/system/anki-worker.service <<EOF
+[Unit]
+Description=Anki Worker Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/anki-service
+Environment="REDIS_HOST=$REST_IP"
+Environment="SHARED_STORAGE_ROOT=$SHARED_ROOT"
+Environment="SHARED_UPLOAD_FOLDER=$SHARED_ROOT/uploads"
+Environment="SHARED_OUTPUT_FOLDER=$SHARED_ROOT/outputs"
+ExecStart=$VENV_PATH/bin/python /opt/anki-service/worker.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/anki-worker.log
+StandardError=append:/var/log/anki-worker.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start service
+systemctl daemon-reload
+systemctl enable anki-worker
+systemctl start anki-worker
+
+# Log startup status
+echo "Worker service started at $(date)" >> /var/log/anki-worker.log
+systemctl status anki-worker --no-pager || true
 """
 
     body = {
