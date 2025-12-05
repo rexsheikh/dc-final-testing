@@ -20,7 +20,7 @@
 
 \section{Software and Hardware Components}
 
-The service is intentionally lightweight so that every tier can run on commodity Google Compute Engine VMs while keeping dependencies in the Python standard library plus a minimal set of supporting tools.
+The service is intentionally lightweight so that every tier can run on very basic Google Compute Engine VMs while keeping dependencies in the Python standard library plus a minimal set of supporting tools.
 
 \begin{longtable}{p{0.28\linewidth} p{0.32\linewidth} p{0.32\linewidth}}
 \toprule
@@ -126,6 +126,6 @@ Networking & Firewall rule \texttt{allow-5000}, internal SSH & Public TCP/5000 f
 
 \section{Summary}
 
-The PDF-to-Anki Text Service deliberately prioritizes predictable deployment and datacenter-pattern reinforcement (snapshots, queues, monitoring scripts) over sophisticated NLP. By running everything on small Google Compute Engine VMs with pure-Python tooling, the stack remains easy to debug, test, and reason about while still demonstrating distributed workload orchestration. Scaling paths (Cloud Memorystore, Cloud Storage, load-balanced REST tiers) are documented for future iterations once the coursework requirements are satisfied.
+The Autodeck service deliberately prioritizes predictable deployment and datacenter-pattern reinforcement (snapshots, queues, monitoring scripts) over sophisticated NLP. By running everything on small Google Compute Engine VMs with pure-Python tooling, the stack remains easy to debug, test, and reason about while still demonstrating distributed workload orchestration. Scaling paths (Cloud Memorystore, Cloud Storage, load-balanced REST tiers) are documented for future iterations once the coursework requirements are satisfied. 
 
 \end{document}

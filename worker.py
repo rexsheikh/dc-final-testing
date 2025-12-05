@@ -44,7 +44,9 @@ REDIS_PORT = int(os.environ.get('REDIS_PORT', '6379'))
 # Redis connection (update for Cloud Memorystore)
 redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
-OUTPUT_FOLDER = '/tmp/outputs'
+shared_root = os.environ.get('SHARED_STORAGE_ROOT')
+default_output = os.path.join(shared_root, 'outputs') if shared_root else '/tmp/outputs'
+OUTPUT_FOLDER = os.environ.get('SHARED_OUTPUT_FOLDER', default_output)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 

@@ -144,6 +144,13 @@ fi
 
 cd anki-service
 
+SHARED_ROOT="/mnt/shared"
+export SHARED_STORAGE_ROOT="$SHARED_ROOT"
+export SHARED_UPLOAD_FOLDER="$SHARED_ROOT/uploads"
+export SHARED_OUTPUT_FOLDER="$SHARED_ROOT/outputs"
+sudo mkdir -p "$SHARED_UPLOAD_FOLDER" "$SHARED_OUTPUT_FOLDER"
+sudo chown $(whoami):$(whoami) "$SHARED_ROOT" "$SHARED_UPLOAD_FOLDER" "$SHARED_OUTPUT_FOLDER"
+
 if [ -d "$VENV_PATH" ]; then
     source "$VENV_PATH/bin/activate"
 else

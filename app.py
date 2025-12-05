@@ -19,8 +19,12 @@ import redis
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
-app.config['OUTPUT_FOLDER'] = '/tmp/outputs'
+
+shared_root = os.environ.get('SHARED_STORAGE_ROOT')
+default_upload = os.path.join(shared_root, 'uploads') if shared_root else '/tmp/uploads'
+default_output = os.path.join(shared_root, 'outputs') if shared_root else '/tmp/outputs'
+app.config['UPLOAD_FOLDER'] = os.environ.get('SHARED_UPLOAD_FOLDER', default_upload)
+app.config['OUTPUT_FOLDER'] = os.environ.get('SHARED_OUTPUT_FOLDER', default_output)
 
 # Redis connection (update host for Cloud Memorystore)
 redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
