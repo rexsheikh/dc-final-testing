@@ -24,12 +24,25 @@ else
   echo "No job ID found in queue"
 fi
 
+glog_rest_dir(){
+  log "REST shared storage layout"
+  gcloud compute ssh "$REST_INSTANCE" --zone="$ZONE" --command "ls -lah /mnt/shared && ls -lah /mnt/shared/uploads || true"
+}
+
+glog_rest_dir
+
 for worker in "${worker_list[@]}"; do
   log "Worker $worker environment"
   gcloud compute ssh "$worker" --zone="$ZONE" --command "python3 - <<'PY'
 import os
 print('REDIS_HOST env:', os.environ.get('REDIS_HOST'))
+print('SHARED_STORAGE_ROOT:', os.environ.get('SHARED_STORAGE_ROOT'))
+print('SHARED_UPLOAD_FOLDER:', os.environ.get('SHARED_UPLOAD_FOLDER'))
+print('SHARED_OUTPUT_FOLDER:', os.environ.get('SHARED_OUTPUT_FOLDER'))
 PY"
+
+  log "Worker $worker shared storage"
+  gcloud compute ssh "$worker" --zone="$ZONE" --command "ls -lah /mnt/shared || true; ls -lah /mnt/shared/uploads || true"
 
   log "Worker $worker process + log"
   gcloud compute ssh "$worker" --zone="$ZONE" --command \

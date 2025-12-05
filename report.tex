@@ -40,11 +40,11 @@ Deployment tooling (\texttt{setup\_base\_vm.sh}, \texttt{create\_rest\_tier.py},
 \addlinespace
 Verification scripts (\texttt{verify\_setup.sh}, \texttt{quick-verify.sh}, \texttt{debug\_rest\_server.sh}) & Diagnostics and smoke tests & Validate gcloud config, VM state, and REST endpoints after deployment. \\
 \addlinespace
-REST VM hardware & \texttt{e2-medium} (2 vCPU, 4 GB RAM) & Hosts Flask + Redis + file storage under \texttt{/tmp}. \\
+REST VM hardware & \texttt{e2-medium} (2 vCPU, 4 GB RAM) & Hosts Flask + Redis + shared disk mounted at \texttt{/mnt/shared}. \\
 \addlinespace
 Worker VMs & Two \texttt{f1-micro} instances (0.2 vCPU, 614 MB RAM) & Each pulls from Redis, processes text in 2--5 seconds, and writes to \texttt{/tmp/outputs}. \\
 \addlinespace
-Storage & Local \texttt{/tmp/uploads}, \texttt{/tmp/outputs} & Designed to migrate to Cloud Storage once durability/scalability is required. \\
+Storage & Shared persistent disk (\texttt{/mnt/shared}) & REST uploads and worker reads both use \texttt{/mnt/shared/uploads} and \texttt{/mnt/shared/outputs}; later upgrade path is Cloud Storage. \\
 \addlinespace
 Networking & Firewall rule \texttt{allow-5000}, internal SSH & Public TCP/5000 for REST. Internal traffic between tiers over default VPC. \\
 \bottomrule
@@ -77,9 +77,9 @@ Networking & Firewall rule \texttt{allow-5000}, internal SSH & Public TCP/5000 f
 
 \subsection*{Interaction Narrative}
 \begin{enumerate}[itemsep=0.3em]
-    \item Clients upload \texttt{.txt} files to the Flask REST tier, which stores them under \texttt{/tmp/uploads} and enqueues job IDs in Redis using \texttt{LPUSH}.
-    \item Workers running on separate \texttt{f1-micro} VMs perform blocking pops (\texttt{BRPOP}) against the \texttt{job\_queue}, fetch the associated metadata, and read the text file via SSH-mounted paths or HTTP fetch from the REST VM.
-    \item Each worker executes \texttt{nlp.py}: it calculates Flesch-Kincaid metrics, extracts keywords/entities, and now can emit complex-word CSV decks. Output decks are stored under \texttt{/tmp/outputs}.
+    \item Clients upload \texttt{.txt} files to the Flask REST tier, which writes them to the shared disk under \texttt{/mnt/shared/uploads} and enqueues job IDs in Redis using \texttt{LPUSH}.
+    \item Workers running on separate \texttt{f1-micro} VMs perform blocking pops (\texttt{BRPOP}) against the \texttt{job\_queue}, fetch the associated metadata, and read the text directly from the shared mount (no scp/HTTP hops needed).
+    \item Each worker executes \texttt{nlp.py}: it calculates Flesch-Kincaid metrics, extracts keywords/entities, and emits complex-word CSV decks back onto \texttt{/mnt/shared/outputs} so the REST tier can stream them to clients.
     \item Job status documents inside Redis are updated to reflect \texttt{queued → processing → completed/failed}, enabling the REST tier to serve \texttt{/status/<job\_id>} queries.
     \item Clients download completed decks through \texttt{/download/<job\_id>}, which streams the CSV from local storage.
 \end{enumerate}
@@ -107,7 +107,7 @@ Networking & Firewall rule \texttt{allow-5000}, internal SSH & Public TCP/5000 f
 \begin{itemize}[itemsep=0.2em]
     \item Single REST VM (\texttt{e2-medium}) handles uploads, metadata queries, and CSV downloads while co-locating Redis for a simple deployment footprint.
     \item Two worker VMs (\texttt{f1-micro}) pull jobs concurrently; each job reads a text file into memory, runs FK + TF-IDF + regex NER (2--5 seconds per document), generates a deck, and updates Redis status.
-    \item Filesystem storage under \texttt{/tmp/uploads} and \texttt{/tmp/outputs} keeps the architecture simple; future versions can swap in Cloud Storage without changing worker logic.
+    \item Filesystem storage now lives on a shared persistent disk (\texttt{/mnt/shared/uploads} and \texttt{/mnt/shared/outputs}), so REST and worker tiers see the same files while retaining a clean upgrade path to Cloud Storage.
 \end{itemize}
 
 \textbf{Supported workload.}
@@ -126,6 +126,6 @@ Networking & Firewall rule \texttt{allow-5000}, internal SSH & Public TCP/5000 f
 
 \section{Summary}
 
-The Autodeck service deliberately prioritizes predictable deployment and datacenter-pattern reinforcement (snapshots, queues, monitoring scripts) over sophisticated NLP. By running everything on small Google Compute Engine VMs with pure-Python tooling, the stack remains easy to debug, test, and reason about while still demonstrating distributed workload orchestration. Scaling paths (Cloud Memorystore, Cloud Storage, load-balanced REST tiers) are documented for future iterations once the coursework requirements are satisfied. 
+The Autodeck service deliberately prioritizes predictable deployment and datacenter-pattern reinforcement (snapshots, queues, monitoring scripts, shared storage mounts) over sophisticated NLP. By running everything on small Google Compute Engine VMs with pure-Python tooling, the stack remains easy to debug, test, and reason about while still demonstrating distributed workload orchestration. Scaling paths (Cloud Memorystore, Cloud Storage, load-balanced REST tiers) are documented for future iterations once the coursework requirements are satisfied. 
 
 \end{document}
