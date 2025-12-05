@@ -42,9 +42,9 @@ Verification scripts (\texttt{verify\_setup.sh}, \texttt{check\_queue\_process.s
 \addlinespace
 REST VM hardware & \texttt{e2-medium} (2 vCPU, 4 GB RAM) & Hosts Flask + Redis + shared disk mounted at \texttt{/mnt/shared}. \\
 \addlinespace
-Worker VMs & Two \texttt{f1-micro} instances (0.2 vCPU, 614 MB RAM) & Each pulls from Redis, processes text in 2--5 seconds, and writes to \texttt{/tmp/outputs}. \\
+Worker VMs & Two \texttt{f1-micro} instances (0.2 vCPU, 614 MB RAM) & Each pulls from Redis, reads file content from job metadata, processes text in 2--5 seconds, and writes CSV outputs locally. \\
 \addlinespace
-Storage & Shared persistent disk (\texttt{/mnt/shared}) & REST uploads and worker reads both use \texttt{/mnt/shared/uploads} and \texttt{/mnt/shared/outputs}; later upgrade path is Cloud Storage. \\
+Storage & Redis-based content passing + local disk & File content stored in Redis job metadata (up to 16MB); workers process from memory. Outputs written to local \texttt{/mnt/shared/outputs}. Upgrade path: Cloud Storage with signed URLs. \\
 \addlinespace
 Networking & Firewall rule \texttt{allow-5000}, internal SSH & Public TCP/5000 for REST. Internal traffic between tiers over default VPC. \\
 \bottomrule
@@ -77,11 +77,11 @@ Networking & Firewall rule \texttt{allow-5000}, internal SSH & Public TCP/5000 f
 
 \subsection*{Interaction Narrative}
 \begin{enumerate}[itemsep=0.3em]
-    \item Clients upload \texttt{.txt} files to the Flask REST tier, which writes them to the shared disk under \texttt{/mnt/shared/uploads} and enqueues job IDs in Redis using \texttt{LPUSH}.
-    \item Workers running on separate \texttt{f1-micro} VMs perform blocking pops (\texttt{BRPOP}) against the \texttt{job\_queue}, fetch the associated metadata, and read the text directly from the shared mount (no scp/HTTP hops needed).
-    \item Each worker executes \texttt{nlp.py}: it calculates Flesch-Kincaid metrics, extracts keywords/entities, and emits complex-word CSV decks back onto \texttt{/mnt/shared/outputs} so the REST tier can stream them to clients.
-    \item Job status documents inside Redis are updated to reflect \texttt{queued → processing → completed/failed}, enabling the REST tier to serve \texttt{/status/<job\_id>} queries.
-    \item Clients download completed decks through \texttt{/download/<job\_id>}, which streams the CSV from local storage.
+    \item Clients upload \texttt{.txt} files to the Flask REST tier, which saves them to local disk (\texttt{/mnt/shared/uploads}), reads the content into memory, stores both filepath and file content in Redis job metadata, and enqueues job IDs using \texttt{LPUSH}.
+    \item Workers running on separate \texttt{f1-micro} VMs perform blocking pops (\texttt{BRPOP}) against the \texttt{job\_queue}, fetch the job metadata from Redis, and extract the \texttt{file\_content} field directly from the metadata (no filesystem or network file transfer needed).
+    \item Each worker executes \texttt{nlp.py} on the in-memory content: it calculates Flesch-Kincaid metrics, extracts keywords/entities, and emits complex-word CSV decks to its local \texttt{/mnt/shared/outputs} directory.
+    \item Job status documents inside Redis are updated to reflect \texttt{queued → processing → completed/failed}, with output paths stored in metadata, enabling the REST tier to serve \texttt{/status/<job\_id>} queries.
+    \item Clients download completed decks through \texttt{/download/<job\_id>}, which streams the CSV from the REST server's local storage (workers' output files remain on worker VMs; production upgrade would sync to Cloud Storage).
 \end{enumerate}
 
 \section{Debugging, Training, and Testing Process}
@@ -108,9 +108,9 @@ Networking & Firewall rule \texttt{allow-5000}, internal SSH & Public TCP/5000 f
 \begin{itemize}[itemsep=0.2em]
     \item Single REST VM (\texttt{e2-medium}) handles uploads, metadata queries, and CSV downloads while co-locating Redis for a simple deployment footprint. The REST tier runs as a systemd service (\texttt{anki-rest.service}) with auto-restart on failure and integrated logging via journalctl.
     \item Two worker VMs (\texttt{f1-micro}) pull jobs concurrently via \texttt{BRPOP}; each worker runs as a systemd service (\texttt{anki-worker.service}) ensuring automatic recovery from crashes with 10-second restart delays.
-    \item Environment variables (\texttt{REDIS\_HOST}, \texttt{SHARED\_STORAGE\_ROOT}, \texttt{SHARED\_UPLOAD\_FOLDER}, \texttt{SHARED\_OUTPUT\_FOLDER}) are configured in systemd service files and also available via GCP instance metadata server, providing robust configuration with fallback mechanisms.
-    \item Each worker job reads text from \texttt{/mnt/shared/uploads}, runs FK + TF-IDF + regex NER (2--5 seconds per document), generates a deck to \texttt{/mnt/shared/outputs}, and updates Redis status atomically.
-    \item Shared storage at \texttt{/mnt/shared} enables workers to access uploaded files without network copies, while maintaining a clean upgrade path to Cloud Storage buckets with signed URLs.
+    \item Environment variables (\texttt{REDIS\_HOST}, \texttt{SHARED\_STORAGE\_ROOT}, \texttt{SHARED\_OUTPUT\_FOLDER}, \texttt{PYTHONUNBUFFERED}) are configured in systemd service files with bash variable expansion (unquoted heredoc) and also available via GCP instance metadata server, providing robust configuration with fallback mechanisms.
+    \item File content is stored in Redis job metadata when uploaded (up to 16MB limit), eliminating the need for shared filesystem infrastructure. Workers read \texttt{file\_content} from Redis, run FK + TF-IDF + regex NER (2--5 seconds per document), generate CSV decks to local \texttt{/mnt/shared/outputs}, and update Redis status atomically.
+    \item This Redis-based content passing simplifies deployment (no NFS or persistent disk attachment needed) while maintaining a clean upgrade path to Cloud Storage with signed URLs for larger files or multi-region deployments.
 \end{itemize}
 
 \textbf{Supported workload.}
@@ -123,8 +123,9 @@ Networking & Firewall rule \texttt{allow-5000}, internal SSH & Public TCP/5000 f
 \textbf{Potential bottlenecks.}
 \begin{itemize}[itemsep=0.2em]
     \item Local Redis + filesystem make the REST VM a single point of failure; migrating to Cloud Memorystore and Cloud Storage would improve availability and horizontal scalability.
+    \item Storing file content in Redis limits scalability: Redis values are capped at 512 MB by default, but storing many large files increases memory pressure. The 16 MB upload limit keeps individual jobs manageable, but high concurrency could exhaust Redis memory. Production upgrade: use Cloud Storage with signed URLs, storing only object paths in Redis.
     \item The \texttt{f1-micro} instances have only 614 MB RAM; extremely large text files (multi-MB) could cause swapping or longer processing times. Input size limits (16 MB uploads, 50,000-character default processing window) mitigate this.
-    \item Network egress from the REST VM could saturate if many large decks are downloaded simultaneously; in practice, CSVs are tiny ($\sim$KB), but heavier workloads would benefit from load-balanced REST instances.
+    \item Worker output files remain isolated on each worker VM; clients can only download decks if the REST server stores outputs locally. Current implementation requires workers and REST to share a filesystem or use Cloud Storage for production reliability.
     \item Systemd auto-restart (10-second delay) prevents cascading failures but can mask underlying configuration issues; \texttt{check\_queue\_process.sh} includes restart count monitoring to detect problematic crash loops.
 \end{itemize}
 

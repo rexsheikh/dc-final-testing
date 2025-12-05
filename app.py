@@ -318,6 +318,7 @@ def job_status(job_id):
 def download_deck(job_id):
     """
     Download the generated Anki CSV deck for a completed job
+    Serves content from Redis metadata (no shared filesystem needed)
     """
     job_json = redis_client.get(f"job:{job_id}")
     if not job_json:
@@ -328,12 +329,18 @@ def download_deck(job_id):
     if job_data['status'] != 'completed':
         return jsonify({'error': f"Job not completed (status: {job_data['status']})"}), 400
     
-    output_path = job_data.get('output_path')
-    if not output_path or not os.path.exists(output_path):
-        return jsonify({'error': 'Output file not found'}), 404
+    output_content = job_data.get('output_content')
+    if not output_content:
+        return jsonify({'error': 'Output content not found in job metadata'}), 404
+    
+    # Create in-memory file-like object from content
+    from io import BytesIO
+    output_bytes = BytesIO(output_content.encode('utf-8'))
+    output_bytes.seek(0)
     
     return send_file(
-        output_path,
+        output_bytes,
+        mimetype='text/csv',
         as_attachment=True,
         download_name=f"{job_data['filename'].rsplit('.', 1)[0]}_deck.csv"
     )

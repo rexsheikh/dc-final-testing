@@ -149,13 +149,19 @@ def worker_loop():
             # Process the file content
             try:
                 output_path = process_text_content(file_content, filename, job_id)
+                
+                # Read output CSV content to store in Redis
+                with open(output_path, 'r', encoding='utf-8') as f:
+                    output_content = f.read()
+                
                 update_job_status(
                     job_id,
                     'completed',
                     output_path=output_path,
+                    output_content=output_content,  # Store CSV content in Redis
                     completed_at=datetime.utcnow().isoformat()
                 )
-                print(f"Job {job_id} completed successfully")
+                print(f"Job {job_id} completed successfully", flush=True)
             except Exception as e:
                 print(f"Error processing job {job_id}: {e}")
                 update_job_status(
