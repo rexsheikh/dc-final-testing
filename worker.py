@@ -105,7 +105,7 @@ def process_text_content(text: str, filename: str, job_id: str) -> str:
     fk_results = flesch_kincaid_analysis(text)
     complex_words = fk_results['complex_words']
     
-    print(f"Found {len(complex_words)} complex words (grade level: {fk_results['grade_level']:.1f})", flush=True)
+    print(f"Found {len(complex_words)} complex words (FK grade: {fk_results['flesch_kincaid_grade']:.1f})", flush=True)
     
     # Generate output CSV with complex words only
     output_path = os.path.join(OUTPUT_FOLDER, f"{job_id}_deck.csv")
