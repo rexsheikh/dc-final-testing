@@ -119,6 +119,7 @@ def create_worker_instance(
     name: str,
     machine_type_short: str,
     snapshot_name: str,
+    rest_internal_ip: str,
 ) -> Dict:
     """Create a worker instance with startup script."""
     machine_type = f"zones/{zone}/machineTypes/{machine_type_short}"
@@ -153,8 +154,20 @@ fi
 # Install Python dependencies
 pip install -r requirements.txt
 
+REST_IP=$(curl -s -H 'Metadata-Flavor: Google' \
+    "http://metadata.google.internal/computeMetadata/v1/instance/attributes/rest-internal-ip" \
+    || true)
+if [ -n "$REST_IP" ]; then
+    export REDIS_HOST="$REST_IP"
+fi
+
 # Start worker process
-nohup python worker.py &>/var/log/anki-worker.log &
+LOG_FILE=/var/log/anki-worker.log
+if [ ! -f "$LOG_FILE" ]; then
+    sudo touch "$LOG_FILE"
+    sudo chown $(whoami):$(whoami) "$LOG_FILE"
+fi
+nohup python worker.py &>> "$LOG_FILE" &
 """
 
     body = {
@@ -188,6 +201,7 @@ nohup python worker.py &>/var/log/anki-worker.log &
         "metadata": {
             "items": [
                 {"key": "startup-script", "value": startup_script},
+                {"key": "rest-internal-ip", "value": rest_internal_ip},
             ]
         },
     }
@@ -214,6 +228,15 @@ def get_external_ip(compute, project: str, zone: str, instance_name: str) -> str
     raise RuntimeError("No external IP found")
 
 
+def get_internal_ip(compute, project: str, zone: str, instance_name: str) -> str:
+    """Retrieve instance internal (network) IP."""
+    inst = compute.instances().get(project=project, zone=zone, instance=instance_name).execute()
+    for nic in inst.get("networkInterfaces", []):
+        if "networkIP" in nic:
+            return nic["networkIP"]
+    raise RuntimeError("No internal IP found")
+
+
 def main():
     compute = googleapiclient.discovery.build("compute", "v1")
     
@@ -226,6 +249,13 @@ def main():
     # Ensure snapshot exists
     snapshot_name = ensure_snapshot(compute, PROJECT_ID, ZONE, SOURCE_INSTANCE)
     
+    # Discover REST tier internal IP for Redis connections
+    try:
+        rest_internal_ip = get_internal_ip(compute, PROJECT_ID, ZONE, "anki-rest-server")
+        print(f"REST tier internal IP: {rest_internal_ip}")
+    except Exception as exc:
+        raise RuntimeError("Could not determine REST server internal IP") from exc
+    
     # Create worker instances
     workers = []
     for i in range(1, WORKER_COUNT + 1):
@@ -234,7 +264,7 @@ def main():
         
         t0 = time.monotonic()
         op = create_worker_instance(
-            compute, PROJECT_ID, ZONE, worker_name, MACHINE_TYPE, snapshot_name
+            compute, PROJECT_ID, ZONE, worker_name, MACHINE_TYPE, snapshot_name, rest_internal_ip
         )
         wait_for_operation(compute, PROJECT_ID, ZONE, op["name"])
         t1 = time.monotonic()
