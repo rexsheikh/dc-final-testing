@@ -14,13 +14,12 @@
 \begin{document}
 
 \begin{center}
-{\LARGE \textbf{Text-to-Anki Flashcard Service Report}}\\[0.5em]
-{\large Based on \texttt{ARCHITECTURE.md}}
+{\LARGE \textbf{AutoDeck: Text-to-Anki Flashcard Service Report}}\\[0.5em]
 \end{center}
 
 \section{Software and Hardware Components}
 
-The service is intentionally lightweight so that every tier can run on very basic Google Compute Engine VMs while keeping dependencies in the Python standard library plus a minimal set of supporting tools.
+The service is lightweight so that every tier can run on very basic Google Compute Engine VMs while keeping dependencies in the Python standard library plus a minimal set of supporting tools.
 
 \begin{longtable}{p{0.28\linewidth} p{0.32\linewidth} p{0.32\linewidth}}
 \toprule
@@ -32,7 +31,7 @@ Python 3.10 + standard library & Runtime for Flask API, worker, and NLP pipeline
 \addlinespace
 Flask 3.0 + Werkzeug & REST API tier & Handles upload/status/download endpoints. Deployed on a single VM tagged \texttt{allow-5000}. \\
 \addlinespace
-Redis 5.x & Queue + metadata store & LPUSH/BRPOP job queue plus job status hashes/key-value pairs. Initially local to REST VM; designed to migrate to Cloud Memorystore. \\
+Redis 5.x & Queue + metadata store & LPUSH/BRPOP job queue plus job status hashes/key-value pairs. Initially local to REST VM. designed to migrate to Cloud Memorystore. \\
 \addlinespace
 NLP worker scripts (\texttt{worker.py}, \texttt{nlp.py}) & Transform text to decks & Workers consume queue jobs, run FK + lightweight pipeline, and emit CSV output. \\
 \addlinespace
@@ -44,7 +43,7 @@ REST VM hardware & \texttt{e2-medium} (2 vCPU, 4 GB RAM) & Hosts Flask + Redis +
 \addlinespace
 Worker VMs & Two \texttt{f1-micro} instances (0.2 vCPU, 614 MB RAM) & Each pulls from Redis, reads file content from job metadata, processes text in 2--5 seconds, and writes CSV outputs locally. \\
 \addlinespace
-Storage & Redis-based content passing + local disk & File content stored in Redis job metadata (up to 16MB); workers process from memory. Outputs written to local \texttt{/mnt/shared/outputs}. Upgrade path: Cloud Storage with signed URLs. \\
+Storage & Redis-based content passing + local disk & File content stored in Redis job metadata (up to 16MB). workers process from memory. Outputs written to local \texttt{/mnt/shared/outputs}. Upgrade path: Cloud Storage with signed URLs. \\
 \addlinespace
 Networking & Firewall rule \texttt{allow-5000}, internal SSH & Public TCP/5000 for REST. Internal traffic between tiers over default VPC. \\
 \bottomrule
@@ -79,18 +78,18 @@ Networking & Firewall rule \texttt{allow-5000}, internal SSH & Public TCP/5000 f
 \begin{enumerate}[itemsep=0.3em]
     \item Clients upload \texttt{.txt} files to the Flask REST tier, which saves them to local disk (\texttt{/mnt/shared/uploads}), reads the content into memory, stores both filepath and file content in Redis job metadata, and enqueues job IDs using \texttt{LPUSH}.
     \item Workers running on separate \texttt{f1-micro} VMs perform blocking pops (\texttt{BRPOP}) against the \texttt{job\_queue}, fetch the job metadata from Redis, and extract the \texttt{file\_content} field directly from the metadata (no filesystem or network file transfer needed).
-    \item Each worker executes \texttt{nlp.py} on the in-memory content: it calculates Flesch-Kincaid metrics, extracts keywords/entities, and emits complex-word CSV decks to its local \texttt{/mnt/shared/outputs} directory.
+    \item Each worker executes \texttt{nlp.py}. This calculates Flesch-Kincaid metrics, extracts keywords/entities, and emits complex-word CSV decks to its local.  \texttt{/mnt/shared/outputs} directory.
     \item Job status documents inside Redis are updated to reflect \texttt{queued → processing → completed/failed}, with output paths stored in metadata, enabling the REST tier to serve \texttt{/status/<job\_id>} queries.
-    \item Clients download completed decks through \texttt{/download/<job\_id>}, which streams the CSV from the REST server's local storage (workers' output files remain on worker VMs; production upgrade would sync to Cloud Storage).
+    \item Clients download completed decks through \texttt{/download/<job\_id>}, which streams the CSV from the REST server's local storage (workers' output files remain on worker VMs. This approach has limited capacity, a good future upgrade would be to sync to Cloud Storage like S3).
 \end{enumerate}
 
 \section{NLP Processing: Flesch-Kincaid Analysis}
 
-The core NLP processing pipeline uses Flesch-Kincaid Grade Level analysis to identify and extract the most complex vocabulary words from input texts, creating targeted flashcard decks optimized for learning difficult terms.
+The core NLP processing pipeline uses Flesch-Kincaid Grade Level analysis to identify and extract the most complex vocabulary words from input texts. 
 
 \subsection*{Flesch-Kincaid Grade Level Formula}
 
-The Flesch-Kincaid Grade Level provides a readability score indicating the U.S. grade level required to understand a text:
+The Flesch-Kincaid Grade Level provides a readability score that corresponds to U.S. grade reading level:
 
 \[
 \text{FK Grade} = 0.39 \times \left(\frac{\text{total words}}{\text{total sentences}}\right) + 11.8 \times \left(\frac{\text{total syllables}}{\text{total words}}\right) - 15.59
@@ -104,12 +103,12 @@ This metric combines:
 
 \subsection*{Complex Word Extraction}
 
-Beyond calculating overall text grade level, our implementation performs word-level complexity analysis:
+Beyond calculating overall text grade level, this implementation performs word-level complexity analysis:
 
 \begin{enumerate}[itemsep=0.3em]
     \item \textbf{Syllable counting}: Pure-Python heuristic counts vowel clusters in each word (e.g., ``ephemeral'' = 4 syllables, ``cat'' = 1 syllable)
     \item \textbf{Complexity scoring}: Each unique word receives a complexity score: $\text{complexity} = \text{syllables} \times \text{word\_length}$
-    \item \textbf{Ranking and filtering}: Words are sorted by complexity score; the top N most difficult words (default: 20) are selected for flashcard generation
+    \item \textbf{Ranking and filtering}: Words are sorted by complexity score. the top N most difficult words (default: 20) are selected for flashcard generation
     \item \textbf{Output format}: Complex words are written to CSV with placeholder definitions for user completion
 \end{enumerate}
 
@@ -124,62 +123,40 @@ Beyond calculating overall text grade level, our implementation performs word-le
 
 \subsection*{Design Rationale}
 
-\begin{itemize}[itemsep=0.2em]
-    \item \textbf{Lightweight implementation}: No external ML frameworks or pre-trained models required; runs efficiently on \texttt{f1-micro} instances
-    \item \textbf{Deterministic results}: Same input text always produces identical output, simplifying testing and debugging
-    \item \textbf{Educational focus}: Extracts vocabulary most likely to challenge learners, maximizing study efficiency
-    \item \textbf{Fast processing}: Pure-Python regex and arithmetic operations complete in 2--5 seconds per document
-\end{itemize}
-
-The FK analysis replaced an earlier TF-IDF keyword extraction approach, which extracted all words indiscriminately. The complexity-based filtering ensures flashcard decks contain only challenging vocabulary worth studying, avoiding trivial words like ``cat,'' ``dog,'' or ``bird.''
+The pipeline is deliberately lightweight so it can run on \texttt{f1-micro} instances without external ML frameworks or pre-trained models, relying solely on pure-Python regex and arithmetic routines that finish within 2--5 seconds per document. The emphasis on FK-derived complexity scores keeps the generated flashcards focused on the terms most likely to challenge learners. The FK analysis replaced an earlier TF-IDF keyword keyword extractor and named-entity-recognition. It required some costly libraries like nltk, tensorflow, and keras that the worker VMs struggled to support. I found it added only marginal benefit compared to FK scores. 
 
 \section{Debugging, Training, and Testing Process}
 
 \textbf{Debugging workflow.}
 \begin{itemize}[itemsep=0.2em]
-    \item The setup script now performs an SSH readiness loop before copying dependency installers, preventing ``connection refused'' errors on brand-new instances.
-    \item \texttt{verify\_setup.sh} and \texttt{check\_queue\_process.sh} assert that required gcloud services, firewall rules, VMs, and systemd services exist and are running before declaring successful deployment.
-    \item \texttt{check\_queue\_process.sh} provides comprehensive diagnostics: systemd service status, metadata server values, environment variables from running processes, shared storage access, and recent logs from both journalctl and traditional log files.
-    \item Systemd integration enables powerful debugging commands: \texttt{systemctl status anki-worker} shows service health, \texttt{journalctl -u anki-worker -f} streams live logs, and automatic restart-on-failure ensures workers recover from transient errors without manual intervention.
+    \item The setup script now performs an SSH readiness loop before copying dependency installers. 
+    \item \texttt{verify\_setup.sh} and \texttt{check\_queue\_process.sh} check that required gcloud services, firewall rules, VMs, and systemd services exist and are running before declaring successful deployment.
+    \item \texttt{check\_queue\_process.sh} provides diagnostics: metadata server values, environment variables from running processes, shared storage access, and recent logs.
     \item Redis metadata allows replaying failed jobs by inspecting the stored file path and rerunning \texttt{worker.py} locally with the same payload.
 \end{itemize}
 
 \textbf{Training/testing mechanisms.}
 \begin{itemize}[itemsep=0.2em]
-    \item The lightweight NLP stack is deterministic and does not require model training; its heuristics (FK, TF-IDF, regex NER) are verified via unit-style scripts such as \texttt{test\_nlp.py} and \texttt{test\_pipeline.py}, along with manual CLI runs (`python nlp.py sample-data/...`).
-    \item The README and deployment docs prescribe sample invocations that act as regression tests: running the pipeline against a fixed snippet, generating CSV output, and validating counts and keywords.
-    \item Workers and the REST tier are smoke-tested with \texttt{quick-verify.sh} to ensure Redis connectivity, queue operations, and HTTP endpoints behave as expected after each deployment.
+    \item The NLP stack is deterministic and does not require model training. It's output can be verified with manual CLI runs (`python nlp.py sample-data/...`).
+    \item The README and deployment docs describe some simple tests. Running the pipeline against a fixed snippet, generating CSV output, and validating counts and keywords.
+    \item Workers and the REST tier are tested with \texttt{quick-verify.sh} to ensure Redis connectivity, queue operations, and HTTP endpoints behave as expected after each deployment.
 \end{itemize}
 
 \section{System Behavior, Capacity, and Bottlenecks}
 
-\textbf{Working system explanation.}
-\begin{itemize}[itemsep=0.2em]
-    \item Single REST VM (\texttt{e2-medium}) handles uploads, metadata queries, and CSV downloads while co-locating Redis for a simple deployment footprint. The REST tier runs as a systemd service (\texttt{anki-rest.service}) with auto-restart on failure and integrated logging via journalctl.
-    \item Two worker VMs (\texttt{f1-micro}) pull jobs concurrently via \texttt{BRPOP}; each worker runs as a systemd service (\texttt{anki-worker.service}) ensuring automatic recovery from crashes with 10-second restart delays.
-    \item Environment variables (\texttt{REDIS\_HOST}, \texttt{SHARED\_STORAGE\_ROOT}, \texttt{SHARED\_OUTPUT\_FOLDER}, \texttt{PYTHONUNBUFFERED}) are configured in systemd service files with bash variable expansion (unquoted heredoc) and also available via GCP instance metadata server, providing robust configuration with fallback mechanisms.
-    \item File content is stored in Redis job metadata when uploaded (up to 16MB limit), eliminating the need for shared filesystem infrastructure. Workers read \texttt{file\_content} from Redis, run FK + TF-IDF + regex NER (2--5 seconds per document), generate CSV decks to local \texttt{/mnt/shared/outputs}, and update Redis status atomically.
-    \item This Redis-based content passing simplifies deployment (no NFS or persistent disk attachment needed) while maintaining a clean upgrade path to Cloud Storage with signed URLs for larger files or multi-region deployments.
-\end{itemize}
+\textbf{Working system explanation.} A single \texttt{e2-medium} VM hosts the REST tier and Redis, exposing upload, status, and download endpoints while running under \texttt{anki-rest.service}. Two \texttt{f1-micro} workers join the queue via \texttt{BRPOP}. Configuration state such as \texttt{REDIS\_HOST}, \texttt{SHARED\_STORAGE\_ROOT}, \texttt{SHARED\_OUTPUT\_FOLDER}, and \texttt{PYTHONUNBUFFERED} is delivered through the service files while remaining accessible through the instance metadata. When a client uploads a file, the REST tier stores the text directly in Redis metadata (respecting the 16 MB limit) rather than relying on shared storage. Workers retrieve the \texttt{file\_content}, execute FK in roughly 2--5 seconds, emit CSV decks into \texttt{/mnt/shared/outputs}, and updates the job status.
 
 \textbf{Supported workload.}
 \begin{itemize}[itemsep=0.2em]
-    \item With 2 workers at 2--5 seconds per job, throughput is roughly 20--30 text documents per minute, assuming typical lecture-sized inputs ($<$50 KB).
-    \item The REST tier comfortably handles dozens of concurrent uploads/status requests; CPU utilization remains low because heavy work is offloaded to workers.
+    \item With 2 workers at 2--5 seconds per job, throughput is roughly 20--30 text documents per minute assuming small text files ($<$50 KB).
+    \item The REST tier can handle concurrent uploads/status requests. CPU utilization remains low because heavy work is offloaded to workers.
     \item Scaling simply means cloning additional worker VMs from the same snapshot and pointing them at the shared Redis queue.
 \end{itemize}
 
-\textbf{Potential bottlenecks.}
-\begin{itemize}[itemsep=0.2em]
-    \item Local Redis + filesystem make the REST VM a single point of failure; migrating to Cloud Memorystore and Cloud Storage would improve availability and horizontal scalability.
-    \item Storing file content in Redis limits scalability: Redis values are capped at 512 MB by default, but storing many large files increases memory pressure. The 16 MB upload limit keeps individual jobs manageable, but high concurrency could exhaust Redis memory. Production upgrade: use Cloud Storage with signed URLs, storing only object paths in Redis.
-    \item The \texttt{f1-micro} instances have only 614 MB RAM; extremely large text files (multi-MB) could cause swapping or longer processing times. Input size limits (16 MB uploads, 50,000-character default processing window) mitigate this.
-    \item Worker output files remain isolated on each worker VM; clients can only download decks if the REST server stores outputs locally. Current implementation requires workers and REST to share a filesystem or use Cloud Storage for production reliability.
-    \item Systemd auto-restart (10-second delay) prevents cascading failures but can mask underlying configuration issues; \texttt{check\_queue\_process.sh} includes restart count monitoring to detect problematic crash loops.
-\end{itemize}
+\textbf{Potential bottlenecks.} Having Redis and the filesystem on the REST VM is simple but also presents a single point of failure. Migrating to dCloud Storage would better ensure availability and make horizontal scaling feasible. Storing file content inside Redis further constrains scale because, although individual values can reach hundreds of megabytes, sustained ingestion of large files exhausts memory quickly, so the current 16 MB upload limit is a real contraint. The \texttt{f1-micro} workers also impose a constraint with 614 MB of RAM, unusually large texts could induce long runtimes, so input caps are necessary. Additionally, worker-generated CSVs remain on their local disks, meaning the REST tier must either share storage or synchronize outputs before clients can download results, another reason for eventual Cloud Storage adoption. 
 
 \section{Summary}
 
-The Autodeck service deliberately prioritizes predictable deployment and datacenter-pattern reinforcement (snapshots, queues, systemd process management, monitoring scripts, shared storage mounts) over sophisticated NLP. By running everything on small Google Compute Engine VMs with pure-Python tooling and systemd-managed services, the stack remains easy to debug, test, and reason about while demonstrating production-grade reliability patterns (auto-restart, integrated logging, environment isolation). Scaling paths (Cloud Memorystore, Cloud Storage, load-balanced REST tiers) are documented for future iterations once the coursework requirements are satisfied. 
+The Autodeck service prioritizes predictable deployment and datacenter-pattern reinforcement (snapshots, queues, systemd process management, monitoring scripts, shared storage mounts) over sophisticated NLP. By running everything on small Google Compute Engine VMs with pure Python tooling, the stack remains easy to debug, test, and reason about. Scaling paths (Cloud Memorystore, Cloud Storage, load-balanced REST tiers) are notable future improvements for this project. 
 
 \end{document}
