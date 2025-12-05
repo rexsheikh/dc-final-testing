@@ -214,6 +214,9 @@ nohup python worker.py &>> "$LOG_FILE" &
             "items": [
                 {"key": "startup-script", "value": startup_script},
                 {"key": "rest-internal-ip", "value": rest_internal_ip},
+                {"key": "shared-root", "value": "/mnt/shared"},
+                {"key": "shared-upload", "value": "/mnt/shared/uploads"},
+                {"key": "shared-output", "value": "/mnt/shared/outputs"},
             ]
         },
     }

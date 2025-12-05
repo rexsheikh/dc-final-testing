@@ -20,6 +20,21 @@ from urllib.error import URLError
 from nlp import process_pipeline, DeckAssembler
 
 METADATA_REDIS_URL = "http://metadata.google.internal/computeMetadata/v1/instance/attributes/rest-internal-ip"
+METADATA_SHARED_ROOT_URL = "http://metadata.google.internal/computeMetadata/v1/instance/attributes/shared-root"
+METADATA_SHARED_UPLOAD_URL = "http://metadata.google.internal/computeMetadata/v1/instance/attributes/shared-upload"
+METADATA_SHARED_OUTPUT_URL = "http://metadata.google.internal/computeMetadata/v1/instance/attributes/shared-output"
+
+
+def _metadata_lookup(url: str) -> str:
+    try:
+        req = Request(url, headers={"Metadata-Flavor": "Google"})
+        with urlopen(req, timeout=2) as resp:
+            value = resp.read().decode().strip()
+            if value:
+                return value
+    except URLError:
+        return ""
+    return ""
 
 
 def discover_redis_host(default: str = "localhost") -> str:
@@ -27,15 +42,16 @@ def discover_redis_host(default: str = "localhost") -> str:
     env_host = os.environ.get("REDIS_HOST")
     if env_host:
         return env_host
-    try:
-        req = Request(METADATA_REDIS_URL, headers={"Metadata-Flavor": "Google"})
-        with urlopen(req, timeout=2) as resp:
-            ip = resp.read().decode().strip()
-            if ip:
-                return ip
-    except URLError:
-        pass
-    return default
+    ip = _metadata_lookup(METADATA_REDIS_URL)
+    return ip or default
+
+
+def discover_path(env_key: str, metadata_url: str, default: str) -> str:
+    env_val = os.environ.get(env_key)
+    if env_val:
+        return env_val
+    meta_val = _metadata_lookup(metadata_url)
+    return meta_val or default
 
 
 REDIS_HOST = discover_redis_host()
@@ -44,9 +60,10 @@ REDIS_PORT = int(os.environ.get('REDIS_PORT', '6379'))
 # Redis connection (update for Cloud Memorystore)
 redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
-shared_root = os.environ.get('SHARED_STORAGE_ROOT')
-default_output = os.path.join(shared_root, 'outputs') if shared_root else '/tmp/outputs'
-OUTPUT_FOLDER = os.environ.get('SHARED_OUTPUT_FOLDER', default_output)
+shared_root = discover_path('SHARED_STORAGE_ROOT', METADATA_SHARED_ROOT_URL, '/tmp')
+shared_output = discover_path('SHARED_OUTPUT_FOLDER', METADATA_SHARED_OUTPUT_URL,
+                              os.path.join(shared_root, 'outputs') if shared_root else '/tmp/outputs')
+OUTPUT_FOLDER = shared_output
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 
