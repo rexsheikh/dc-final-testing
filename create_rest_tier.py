@@ -149,6 +149,11 @@ export SHARED_UPLOAD_FOLDER="$SHARED_ROOT/uploads"
 export SHARED_OUTPUT_FOLDER="$SHARED_ROOT/outputs"
 sudo mkdir -p "$SHARED_UPLOAD_FOLDER" "$SHARED_OUTPUT_FOLDER"
 sudo chown $(whoami):$(whoami) "$SHARED_ROOT" "$SHARED_UPLOAD_FOLDER" "$SHARED_OUTPUT_FOLDER"
+sudo tee /etc/profile.d/anki_shared.sh >/dev/null <<'SHAREDEOF'
+export SHARED_STORAGE_ROOT=/mnt/shared
+export SHARED_UPLOAD_FOLDER=/mnt/shared/uploads
+export SHARED_OUTPUT_FOLDER=/mnt/shared/outputs
+SHAREDEOF
 
 # Activate virtual environment (pre-baked in snapshot)
 if [ -d "$VENV_PATH" ]; then
