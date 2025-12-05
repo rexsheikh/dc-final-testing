@@ -231,6 +231,11 @@ sudo systemctl start redis-server
 echo "==> Testing Redis connection..."
 redis-cli ping
 
+echo "==> Preparing directories..."
+sudo mkdir -p /opt
+sudo mkdir -p /opt/anki-venv
+sudo chown $(whoami):$(whoami) /opt/anki-venv
+
 echo "==> Installing global Python packages..."
 sudo python3 -m pip install --upgrade pip setuptools wheel
 python3 -m pip --version

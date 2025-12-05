@@ -1,0 +1,108 @@
+\documentclass{beamer}
+\usetheme{Madrid}
+\usepackage{graphicx}
+\usepackage{hyperref}
+
+\title{PDF-to-Anki Text Service}
+\subtitle{Datacenter-Scale Computing Final Presentation}
+\author{Rex Sheikh}
+\date{Fall 2025}
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}{Project Goals}
+\begin{itemize}
+    \item Convert any uploaded \texttt{.txt} file into ready-to-import Anki decks.
+    \item Demonstrate datacenter-scale patterns (REST tier + queue + worker farm) rather than heavy NLP.
+    \item Achieve fast provisioning: bake dependencies into VM snapshot, clone REST + worker tiers in minutes.
+    \item Provide an end-to-end experience: upload, monitor status, download deck through a web UI.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Software \& Hardware Components}
+\begin{columns}
+\column{0.48\textwidth}
+\textbf{Software}
+\begin{itemize}
+    \item Python 3.10 (standard library, \texttt{venv})
+    \item Flask 3.0 + Werkzeug (REST tier)
+    \item Redis 5.x (queue + metadata)
+    \item Deployment tooling: \texttt{setup\_base\_vm.sh}, \texttt{create\_rest\_tier.py}, \texttt{create\_workers.py}
+    \item Diagnostics scripts: \texttt{verify\_setup.sh}, \texttt{quick-verify.sh}, \texttt{debug\_rest\_server.sh}, \texttt{diagnose\_rest.sh}
+\end{itemize}
+\column{0.48\textwidth}
+\textbf{Hardware}
+\begin{itemize}
+    \item Base VM: Ubuntu 22.04, \texttt{e2-medium} (2 vCPU, 4GB RAM)
+    \item REST Tier: 1 $\times$ \texttt{e2-medium} (hosts Flask + Redis + storage)
+    \item Worker Pool: 2 $\times$ \texttt{f1-micro} (0.2 vCPU, 614MB RAM)
+    \item Networking: \texttt{allow-5000} firewall rule, default VPC
+    \item Storage: Local \texttt{/tmp/uploads} + \texttt{/tmp/outputs} (upgrade path to Cloud Storage)
+\end{itemize}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Architecture Overview}
+\begin{center}
+\begin{verbatim}
+Client --> REST Tier (Flask) --> Redis Queue --> Worker Pool
+   ^             |                ^               |
+   |             v                |               v
+ Download   Metadata (Redis)      |          Deck CSV output
+\end{verbatim}
+\end{center}
+\begin{itemize}
+    \item REST tier handles uploads, queues job IDs, exposes status/download APIs, hosts Redis.
+    \item Workers block on \texttt{BRPOP}, run lightweight NLP pipeline, write CSV decks, update metadata.
+    \item Clients monitor status and download decks through the same REST tier.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Component Interactions}
+\begin{enumerate}
+    \item \textbf{Upload}: client $\rightarrow$ Flask (`/upload`) $\rightarrow$ file stored under \texttt{/tmp/uploads}, job metadata pushed to Redis.
+    \item \textbf{Queue}: REST tier pushes job ID via \texttt{LPUSH job\_queue}; metadata stored as \texttt{job:\{uuid\}} keys.
+    \item \textbf{Worker}: \texttt{BRPOP job\_queue} $\rightarrow$ fetch metadata $\rightarrow$ read file $\rightarrow$ run \texttt{process\_pipeline} (FK + TF-IDF + regex NER) $\rightarrow$ write deck to \texttt{/tmp/outputs}.
+    \item \textbf{Status/Download}: REST tier reads Redis metadata for `/status/<job_id>`; when completed, `/download/<job_id>` streams the CSV.
+    \item \textbf{Dashboard}: UI (rendered via Flask) polls `/jobs`, shows statuses, offers download links when ready.
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{Debugging \& Testing}
+\textbf{Debugging Workflow}
+\begin{itemize}
+    \item `setup_base_vm.sh` includes SSH readiness checks and preinstalls Python deps in a venv before snapshotting.
+    \item `diagnose_rest.sh` automates curl tests, `pip` checks, Flask log tail to debug `/health` failures.
+    \item `debug_rest_server.sh` restarts Flask, tails logs, verifies port 5000 binding.
+    \item Redis metadata makes job replay/recovery trivial; inspect \texttt{job:\{uuid\}} to reproduce failures.
+\end{itemize}
+
+\textbf{Testing Mechanisms}
+\begin{itemize}
+    \item Unit-style scripts (`test_nlp.py`, `test_pipeline.py`) validate FK + pipeline logic.
+    \item `quick-verify.sh` exercises GCP config, VM status, `/health` endpoint.
+    \item Manual CLI: `python nlp.py sample-data/... --generate-deck` ensures deck CSV path works end-to-end.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Working System + Capacity}
+\begin{itemize}
+    \item REST tier handles uploads/status/downloads while co-locating Redis for low latency.
+    \item Worker pool processes files in 2--5 seconds each (pure Python; no ML frameworks). With 2 workers, throughput is 20--30 documents/minute.
+    \item Dashboard surfaces job progress and download links automatically; manual `curl` workflows still supported.
+    \item \textbf{Bottlenecks}: Single REST VM for Redis + storage; f1-micro RAM limits very large text files; local `/tmp` not durable. Documented upgrade path: Cloud Memorystore + Cloud Storage + load-balanced REST tier.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Summary}
+\begin{itemize}
+    \item Achieved an end-to-end PDF-to-Anki service emphasizing datacenter patterns over heavy NLP.
+    \item Baked dependencies into a snapshot + venv for reproducible REST/worker provisioning.
+    \item Lightweight pipeline delivers actionable decks quickly; architecture scales horizontally via additional workers.
+    \item Future work: Cloud Memorystore, Cloud Storage, autoscaling groups, optional ML upgrades for richer NLP.
+\end{itemize}
+\end{frame}
+
+\end{document}
