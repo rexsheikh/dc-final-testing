@@ -64,13 +64,13 @@ OUTPUT_FOLDER = shared_output
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 # Log configuration at startup for debugging
-print(f"Worker starting with configuration:")
-print(f"  REDIS_HOST: {REDIS_HOST}")
-print(f"  REDIS_PORT: {REDIS_PORT}")
-print(f"  SHARED_STORAGE_ROOT: {shared_root}")
-print(f"  SHARED_OUTPUT_FOLDER: {OUTPUT_FOLDER}")
-print(f"  Environment REDIS_HOST: {os.environ.get('REDIS_HOST')}")
-print(f"  Environment SHARED_STORAGE_ROOT: {os.environ.get('SHARED_STORAGE_ROOT')}")
+print(f"Worker starting with configuration:", flush=True)
+print(f"  REDIS_HOST: {REDIS_HOST}", flush=True)
+print(f"  REDIS_PORT: {REDIS_PORT}", flush=True)
+print(f"  SHARED_STORAGE_ROOT: {shared_root}", flush=True)
+print(f"  SHARED_OUTPUT_FOLDER: {OUTPUT_FOLDER}", flush=True)
+print(f"  Environment REDIS_HOST: {os.environ.get('REDIS_HOST')}", flush=True)
+print(f"  Environment SHARED_STORAGE_ROOT: {os.environ.get('SHARED_STORAGE_ROOT')}", flush=True)
 
 # Redis connection (update for Cloud Memorystore)
 redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
@@ -119,7 +119,7 @@ def process_text_file(filepath: str, job_id: str) -> str:
 
 def worker_loop():
     """Main worker loop: BRPOP from queue, process jobs"""
-    print("Worker started, waiting for jobs...")
+    print("Worker started, waiting for jobs...", flush=True)
     
     while True:
         try:

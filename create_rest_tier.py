@@ -190,7 +190,8 @@ WorkingDirectory=/opt/anki-service
 Environment="SHARED_STORAGE_ROOT=$SHARED_ROOT"
 Environment="SHARED_UPLOAD_FOLDER=$SHARED_ROOT/uploads"
 Environment="SHARED_OUTPUT_FOLDER=$SHARED_ROOT/outputs"
-ExecStart=$VENV_PATH/bin/python /opt/anki-service/app.py
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=$VENV_PATH/bin/python -u /opt/anki-service/app.py
 Restart=always
 RestartSec=10
 StandardOutput=append:/var/log/anki-rest.log
