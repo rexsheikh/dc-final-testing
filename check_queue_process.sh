@@ -2,6 +2,9 @@
 set -euo pipefail
 REST_INSTANCE=${REST_INSTANCE:-anki-rest-server}
 ZONE=${ZONE:-us-west1-b}
+WORKERS=${WORKERS:-anki-worker-1,anki-worker-2}
+
+IFS=',' read -r -a worker_list <<< "$WORKERS"
 
 log(){
   printf '\n=== %s ===\n' "$1"
@@ -21,10 +24,15 @@ else
   echo "No job ID found in queue"
 fi
 
-declare -a workers=(anki-worker-1 anki-worker-2)
-for worker in "${workers[@]}"; do
+for worker in "${worker_list[@]}"; do
+  log "Worker $worker environment"
+  gcloud compute ssh "$worker" --zone="$ZONE" --command \
+    "python3 - <<'PY'\nimport os\nprint('REDIS_HOST env:', os.environ.get('REDIS_HOST'))\nPY"
+
   log "Worker $worker process + log"
-  gcloud compute ssh "$worker" --zone="$ZONE" --command "ps -ef | grep -v grep | grep worker.py || echo 'No worker process'; sudo tail -n 40 /var/log/anki-worker.log || echo 'No log'"
+  gcloud compute ssh "$worker" --zone="$ZONE" --command \
+    "ps -ef | grep -v grep | grep worker.py || echo 'No worker process'; sudo tail -n 40 /var/log/anki-worker.log || echo 'No log'"
 done
 
+log "REST Flask log"
 gcloud compute ssh "$REST_INSTANCE" --zone="$ZONE" --command "sudo tail -n 60 /var/log/anki-rest.log"
