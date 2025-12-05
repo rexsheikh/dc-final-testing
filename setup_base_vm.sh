@@ -227,6 +227,9 @@ sudo apt-get install --reinstall -y python3-pip python3-setuptools python3-wheel
 echo "==> Configuring Redis..."
 sudo systemctl enable redis-server
 sudo systemctl start redis-server
+sudo sed -i 's/^bind .*/bind 0.0.0.0/' /etc/redis/redis.conf
+sudo sed -i 's/^protected-mode .*/protected-mode no/' /etc/redis/redis.conf
+sudo systemctl restart redis-server
 
 echo "==> Testing Redis connection..."
 redis-cli ping
