@@ -4,9 +4,8 @@ This guide provides step-by-step Google Cloud commands for deploying and testing
 
 ## Prerequisites
 
-1. Google Cloud SDK installed (`gcloud` CLI)
+1. Google Cloud SDK installed (`gcloud` CLI) or access to google cloud console
 2. Authenticated with your GCP account
-3. Project created with billing enabled
 4. **GitHub authentication configured** (see below)
 
 **Note**: This project uses **lightweight Python-only NLP** with minimal dependencies (Flask, Redis). No TensorFlow, PyTorch, or other heavy ML frameworks are required. This enables fast deployment and low resource usage.
@@ -19,58 +18,10 @@ Test the NLP pipeline locally to verify it works:
 # Clone the repository
 git clone https://github.com/rexsheikh/dc-final-testing
 cd dc-final-testing
+python3 nlp.py sample-data/short-samples/mixed-words.txt --test.csv
 
-# Quick pipeline test
-python3 -c "
-from nlp import process_pipeline, DeckAssembler
+Expected output: the more difficult words from mixed-words.text are extracted effectively and outputted into csv. 
 
-text = '''Machine learning is a subset of artificial intelligence. Neural networks are 
-computational models inspired by biological neurons. Deep learning uses multiple 
-layers to extract features from data. Supervised learning requires labeled training 
-data. Unsupervised learning finds patterns without labels.'''
-
-results = process_pipeline(text, 'test.txt')
-DeckAssembler.write_csv(results['cards'], 'test_output.csv')
-
-print(f'Stats: {results[\"normalized\"][\"word_count\"]} words, {results[\"normalized\"][\"sentence_count\"]} sentences')
-print(f'Generated {len(results[\"cards\"])} flashcards')
-print(f'Top keyword: {results[\"keywords\"][0][0]} (score: {results[\"keywords\"][0][1]:.3f})')
-"
-
-# View output
-cat test_output.csv
-```
-
-Expected output:
-```
-Stats: 44 words, 5 sentences
-Generated 9 flashcards
-Top keyword: learning (score: 0.156)
-```
-
-### GitHub Authentication Setup
-
-GitHub no longer supports password authentication. Before proceeding, set up authentication:
-
-**Quick Setup (Recommended for GCP Cloud Shell):**
-
-```bash
-# Method 1: Personal Access Token
-# Create at: https://github.com/settings/tokens
-# Scopes needed: repo (all)
-git config --global credential.helper 'cache --timeout=7200'
-# Use token as password when cloning
-
-# Method 2: GitHub CLI (easiest)
-gh auth login
-# Follow browser authentication flow
-```
-
-**Detailed authentication guide:** See `SETUP_GUIDE.md` section "GitHub Authentication Methods"
-
-## Quick Start (Automated Setup)
-
-**NEW**: Use the automated setup script to configure everything:
 
 ```bash
 # 1. Run automated setup (creates base VM, installs dependencies, creates snapshot)
@@ -84,12 +35,9 @@ chmod +x setup_base_vm.sh verify_setup.sh
 python3 create_rest_tier.py
 python3 create_workers.py
 ```
-
-For detailed setup instructions, see [`SETUP_GUIDE.md`](SETUP_GUIDE.md).
-
 ---
 
-## Manual Setup (Alternative)
+## Manual Setup
 
 If you prefer manual control or the automated script fails, follow these steps:
 
@@ -97,7 +45,7 @@ If you prefer manual control or the automated script fails, follow these steps:
 
 ```bash
 # Set your project ID
-export PROJECT_ID="substantial-art-471117-v1"
+export PROJECT_ID="your-project-id"
 gcloud config set project $PROJECT_ID
 
 # Set default zone
@@ -196,32 +144,6 @@ gcloud compute snapshots describe base-snapshot-flask-instance
 
 ### 6. Clone Repository Locally
 
-```bash
-# Clone the repo to your local machine
-cd ~/Documents/boulder-fall-2025/data-center-scale-computing
-
-# Using Personal Access Token:
-git clone https://github.com/rexsheikh/dc-final-testing
-# Username: rexsheikh
-# Password: <your-personal-access-token>
-
-# OR using GitHub CLI:
-gh repo clone rexsheikh/dc-final-testing
-
-# OR using SSH (if configured):
-git clone git@github.com:rexsheikh/dc-final-testing.git
-
-cd dc-final-testing
-
-# If repository doesn't exist yet, initialize:
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/rexsheikh/dc-final-testing
-git push -u origin main
-```
-
 ### 7. Create REST Tier VM
 
 ```bash
@@ -271,11 +193,6 @@ curl http://$REST_IP:5000/health
 
 # Expected output: {"status":"healthy","timestamp":"2025-..."}
 
-# Quick end-to-end test
-cat > quick_test.txt << 'EOF'
-Distributed systems enable horizontal scaling. Load balancing distributes requests across multiple servers. Caching reduces database load. Message queues decouple services. Microservices architecture promotes modularity.
-EOF
-
 # Upload and process
 curl -F "files=@quick_test.txt" -F "user=test" http://$REST_IP:5000/upload
 # Copy the job_id from response
@@ -307,8 +224,6 @@ Expected performance metrics with lightweight implementation:
 
 These fast metrics are achievable because we use lightweight, pure-Python NLP instead of heavy ML frameworks.
 
-Record your actual results in `PERFORMANCE.md` for the project report.
-
 ## Testing Regime
 
 ### Test 1: Basic Health Check
@@ -330,13 +245,6 @@ curl http://$REST_IP:5000/health
 
 ```bash
 # Create a test text file
-cat > test_lecture.txt << 'EOF'
-Machine learning is a subset of artificial intelligence. Neural networks are 
-computational models inspired by biological neurons. Deep learning uses multiple 
-layers to extract features from data. Supervised learning requires labeled training 
-data. Unsupervised learning finds patterns without labels. The gradient descent 
-algorithm optimizes model parameters by minimizing loss functions.
-EOF
 
 # Upload the file
 curl -F "files=@test_lecture.txt" \
@@ -372,26 +280,13 @@ curl http://$REST_IP:5000/download/$JOB_ID -o deck.csv
 # View the deck contents
 cat deck.csv
 
-# Expected: CSV with Front,Back columns containing flashcards
+# Expected: CSV with Front,Back columns ready to upload to Anki
 ```
 
 ### Test 5: Multiple File Upload
 
 ```bash
 # Create additional test files
-cat > lecture2.txt << 'EOF'
-Data structures organize information efficiently. Arrays provide constant-time 
-indexed access. Linked lists enable dynamic memory allocation. Hash tables offer 
-average constant-time lookups. Binary trees support ordered data operations. 
-Graph algorithms solve connectivity problems.
-EOF
-
-cat > lecture3.txt << 'EOF'
-Operating systems manage computer resources. Process scheduling allocates CPU time. 
-Virtual memory extends physical RAM. File systems organize persistent storage. 
-Device drivers interface with hardware. System calls provide kernel services.
-EOF
-
 # Upload multiple files
 curl -F "files=@lecture2.txt" \
      -F "files=@lecture3.txt" \
@@ -402,33 +297,6 @@ curl -F "files=@lecture2.txt" \
 curl "http://$REST_IP:5000/jobs?user=testuser"
 ```
 
-### Test 6: Load Testing
-
-```bash
-# Install Apache Bench (if not installed)
-# macOS: already included
-# Ubuntu: sudo apt-get install apache2-utils
-
-# Create a simple upload script
-cat > upload_test.sh << 'EOF'
-#!/bin/bash
-for i in {1..10}; do
-  echo "Upload $i of 10"
-  curl -s -F "files=@test_lecture.txt" http://$REST_IP:5000/upload
-done
-EOF
-
-chmod +x upload_test.sh
-
-# Run concurrent uploads
-./upload_test.sh
-
-# Monitor queue length in Redis
-gcloud compute ssh anki-worker-1 --zone=$ZONE
-redis-cli LLEN job_queue
-# Shows number of pending jobs
-exit
-```
 
 ### Test 7: Worker Scaling Test
 
@@ -445,9 +313,6 @@ gcloud compute ssh anki-worker-1 --zone=$ZONE
 redis-cli LLEN job_queue  # Should decrease as workers process
 exit
 ```
-
-## Monitoring and Debugging
-
 ### View Application Logs
 
 ```bash
@@ -560,120 +425,3 @@ gcloud compute ssh anki-rest-server --zone=$ZONE --command \
   "sudo tail -50 /var/log/anki-rest.log"
 ```
 
-**Solutions:**
-
-**Solution A: Wait for startup script to complete**
-```bash
-# Startup scripts take 2-5 minutes, especially on first run
-# Monitor progress:
-gcloud compute ssh anki-rest-server --zone=$ZONE --command \
-  "sudo journalctl -u google-startup-scripts.service -f"
-# Press Ctrl+C when you see "Finished startup scripts"
-```
-
-**Solution B: GitHub authentication failed (most common)**
-
-If the startup script failed to clone the repository:
-
-```bash
-# SSH into the VM
-gcloud compute ssh anki-rest-server --zone=$ZONE
-
-# Check if repo exists
-ls -la /opt/anki-service
-# If missing, clone manually:
-
-cd /opt
-sudo rm -rf anki-service  # Remove if exists but empty
-sudo git clone https://github.com/rexsheikh/dc-final-testing anki-service
-# Enter your GitHub username and Personal Access Token when prompted
-
-cd anki-service
-sudo pip3 install -r requirements.txt
-
-# Start Flask
-nohup python3 app.py &>/var/log/anki-rest.log &
-
-# Verify it's running
-sleep 2
-curl http://localhost:5000/health
-
-# Should return: {"status":"healthy",...}
-exit
-```
-
-**Solution C: Dependencies missing**
-```bash
-gcloud compute ssh anki-rest-server --zone=$ZONE
-
-cd /opt/anki-service
-sudo pip3 install -r requirements.txt
-
-# Restart Flask
-sudo pkill -f "python3 app.py"
-nohup python3 app.py &>/var/log/anki-rest.log &
-exit
-```
-
-**Solution D: Check firewall tag is applied**
-```bash
-# Verify instance has allow-5000 tag
-gcloud compute instances describe anki-rest-server --zone=$ZONE \
-  --format="get(tags.items)"
-
-# Should include: allow-5000
-# If missing, add it:
-gcloud compute instances add-tags anki-rest-server \
-  --zone=$ZONE \
-  --tags=allow-5000
-```
-
-### Issue: REST API not responding
-
-```bash
-# Check if Flask is running
-gcloud compute ssh anki-rest-server --zone=$ZONE --command \
-  "ps aux | grep 'python.*app.py'"
-
-# Restart Flask manually if needed
-gcloud compute ssh anki-rest-server --zone=$ZONE
-sudo pkill -f "python3 app.py"
-cd /opt/anki-service
-nohup python3 app.py &>/var/log/anki-rest.log &
-exit
-```
-
-### Issue: Workers not processing jobs
-
-```bash
-# Check Redis connectivity
-gcloud compute ssh anki-worker-1 --zone=$ZONE
-redis-cli ping
-# Should return PONG
-
-# Check if worker process is running
-ps aux | grep worker.py
-
-# Restart worker if needed
-sudo pkill -f "python3 worker.py"
-cd /opt/anki-service
-nohup python3 worker.py &>/var/log/anki-worker.log &
-exit
-```
-
-### Issue: Startup script didn't run
-
-```bash
-# Check startup script status
-gcloud compute ssh anki-rest-server --zone=$ZONE --command \
-  "sudo journalctl -u google-startup-scripts.service -n 50"
-
-# Manually run startup commands
-gcloud compute ssh anki-rest-server --zone=$ZONE
-cd /opt
-sudo git clone https://github.com/rexsheikh/dc-final-testing anki-service
-cd anki-service
-sudo pip3 install -r requirements.txt
-nohup python3 app.py &>/var/log/anki-rest.log &
-exit
-```

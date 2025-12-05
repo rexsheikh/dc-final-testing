@@ -84,6 +84,55 @@ Networking & Firewall rule \texttt{allow-5000}, internal SSH & Public TCP/5000 f
     \item Clients download completed decks through \texttt{/download/<job\_id>}, which streams the CSV from the REST server's local storage (workers' output files remain on worker VMs; production upgrade would sync to Cloud Storage).
 \end{enumerate}
 
+\section{NLP Processing: Flesch-Kincaid Analysis}
+
+The core NLP processing pipeline uses Flesch-Kincaid Grade Level analysis to identify and extract the most complex vocabulary words from input texts, creating targeted flashcard decks optimized for learning difficult terms.
+
+\subsection*{Flesch-Kincaid Grade Level Formula}
+
+The Flesch-Kincaid Grade Level provides a readability score indicating the U.S. grade level required to understand a text:
+
+\[
+\text{FK Grade} = 0.39 \times \left(\frac{\text{total words}}{\text{total sentences}}\right) + 11.8 \times \left(\frac{\text{total syllables}}{\text{total words}}\right) - 15.59
+\]
+
+This metric combines:
+\begin{itemize}[itemsep=0.2em]
+    \item \textbf{Average sentence length}: Longer sentences increase complexity
+    \item \textbf{Average syllables per word}: Polysyllabic words indicate higher difficulty
+\end{itemize}
+
+\subsection*{Complex Word Extraction}
+
+Beyond calculating overall text grade level, our implementation performs word-level complexity analysis:
+
+\begin{enumerate}[itemsep=0.3em]
+    \item \textbf{Syllable counting}: Pure-Python heuristic counts vowel clusters in each word (e.g., ``ephemeral'' = 4 syllables, ``cat'' = 1 syllable)
+    \item \textbf{Complexity scoring}: Each unique word receives a complexity score: $\text{complexity} = \text{syllables} \times \text{word\_length}$
+    \item \textbf{Ranking and filtering}: Words are sorted by complexity score; the top N most difficult words (default: 20) are selected for flashcard generation
+    \item \textbf{Output format}: Complex words are written to CSV with placeholder definitions for user completion
+\end{enumerate}
+
+\textbf{Example complexity scores:}
+\begin{itemize}[itemsep=0.2em]
+    \item \textit{cat} (1 syllable × 3 letters) = 3 → excluded
+    \item \textit{dog} (1 syllable × 3 letters) = 3 → excluded
+    \item \textit{serendipity} (5 syllables × 11 letters) = 55 → included
+    \item \textit{ephemeral} (4 syllables × 9 letters) = 36 → included
+    \item \textit{obfuscate} (3 syllables × 9 letters) = 27 → included
+\end{itemize}
+
+\subsection*{Design Rationale}
+
+\begin{itemize}[itemsep=0.2em]
+    \item \textbf{Lightweight implementation}: No external ML frameworks or pre-trained models required; runs efficiently on \texttt{f1-micro} instances
+    \item \textbf{Deterministic results}: Same input text always produces identical output, simplifying testing and debugging
+    \item \textbf{Educational focus}: Extracts vocabulary most likely to challenge learners, maximizing study efficiency
+    \item \textbf{Fast processing}: Pure-Python regex and arithmetic operations complete in 2--5 seconds per document
+\end{itemize}
+
+The FK analysis replaced an earlier TF-IDF keyword extraction approach, which extracted all words indiscriminately. The complexity-based filtering ensures flashcard decks contain only challenging vocabulary worth studying, avoiding trivial words like ``cat,'' ``dog,'' or ``bird.''
+
 \section{Debugging, Training, and Testing Process}
 
 \textbf{Debugging workflow.}

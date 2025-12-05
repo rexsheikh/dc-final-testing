@@ -13,10 +13,11 @@ import googleapiclient.discovery
 from googleapiclient.errors import HttpError
 
 # Configuration
+# ***BE SURE TO CHANGE TO YOUR OWN PROJECT_ID****
 PROJECT_ID = "substantial-art-471117-v1"
 ZONE = "us-west1-b"
 SOURCE_INSTANCE = "flask-instance"
-MACHINE_TYPE = "e2-medium"  # Larger for REST tier
+MACHINE_TYPE = "e2-medium"
 INSTANCE_NAME = "anki-rest-server"
 
 # GitHub repo

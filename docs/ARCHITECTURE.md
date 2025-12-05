@@ -2,20 +2,13 @@
 
 ## Overview
 
-The Text-to-Anki Service is a distributed system for converting text documents into Anki flashcard decks. The architecture emphasizes **datacenter-scale computing concepts** over NLP sophistication.
+The Text-to-Anki Service is a distributed system for converting text documents into Anki flashcard decks. The architecture emphasizes **datacenter-scale computing concepts** over NLP sophistication. The NLP implementation is very lightweight to support basic worker VM usage. 
 
 ## Core Design Principles
 
 ### 1. Lightweight NLP (No Heavy ML Dependencies)
 
 **Decision**: Use pure Python NLP instead of ML frameworks (TensorFlow, PyTorch, transformers, spaCy, NLTK).
-
-**Rationale**:
-- **Focus on systems, not algorithms**: This is a datacenter computing course, not an NLP course
-- **Fast deployment**: No model downloads (multi-GB files), no GPU setup, no dependency hell
-- **Low resource usage**: Runs on `f1-micro` VMs with 614MB RAM
-- **Quick startup**: Workers ready in 30-60 seconds vs. 5-10 minutes for model loading
-- **Simple debugging**: Pure Python is easier to trace and troubleshoot
 
 **Trade-offs**:
 - Lower NLP quality (extractive vs. abstractive summarization, pattern-based vs. learned NER)
@@ -32,7 +25,6 @@ The Text-to-Anki Service is a distributed system for converting text documents i
 **Decision**: Redis LPUSH/BRPOP queue decouples REST API from NLP workers.
 
 **Rationale**:
-- Direct application of Lab 7 (MSaaS) architecture
 - Horizontal scaling: add more workers without API changes
 - Fault tolerance: failed jobs stay in queue, workers are stateless
 - Load balancing: Redis distributes work automatically
@@ -43,12 +35,11 @@ Client → Flask REST → Redis Queue → Worker Pool → Redis Metadata → Cli
          (upload)     (LPUSH)       (BRPOP)       (status update)   (download)
 ```
 
-### 3. Snapshot-Based VM Cloning (Lab 5 Pattern)
+### 3. Snapshot-Based VM Cloning
 
 **Decision**: Create golden image snapshot, then clone REST + worker VMs.
 
 **Rationale**:
-- Direct application of Lab 5 snapshot automation
 - Fast VM creation: 15-25 seconds from snapshot vs. 2-3 minutes from scratch
 - Consistent environment: all VMs have identical Python/Redis/Git setup
 - No containerization needed: snapshots provide the same benefits for this scale
@@ -59,20 +50,7 @@ Client → Flask REST → Redis Queue → Worker Pool → Redis Metadata → Cli
 - Worker tier: 2x `f1-micro` VMs cloned from snapshot
 - Startup scripts: `git clone` + `pip install` + start service
 
-### 4. Public GitHub Repository (Deployment Simplicity)
-
-**Decision**: Use public repo instead of private with deploy keys.
-
-**Rationale**:
-- Startup scripts can clone without authentication
-- Simpler for coursework demonstration
-- No secrets management needed
-- Easy for instructors to review code
-
-**Trade-offs**:
-- Not production-ready (would use Cloud Source Repositories or private repo with Secret Manager)
-
-### 5. Local Redis + Filesystem (Upgradeable Design)
+### 6. Local Redis + Filesystem (Upgradeable Design)
 
 **Decision**: Use local Redis and `/tmp` storage initially, design for cloud upgrade.
 
@@ -167,22 +145,6 @@ Diagnostic tools to:
 - Inspect logs
 - Debug startup failures
 
-## Course Lab Connections
-
-- **Lab 2 (UrlCount)**: Text parsing and frequency analysis → TF-IDF implementation
-- **Labs 3-4 (SQL/PySpark)**: Data aggregation concepts → metadata management in Redis
-- **Lab 5 (Snapshots)**: Snapshot automation → entire VM provisioning strategy
-- **Lab 6 (REST API)**: API design → Flask endpoint structure
-- **Lab 7 (MSaaS)**: Queue architecture → Redis-based worker pattern
-
-## Performance Targets
-
-- **VM boot**: <30 seconds from snapshot
-- **Startup**: <60 seconds (git clone + pip install)
-- **Job processing**: 2-5 seconds per file
-- **API response**: <100ms for metadata queries
-- **Throughput**: 20-30 jobs/minute with 2 workers
-
 ## Future Enhancements
 
 1. **Cloud Memorystore**: Shared Redis for multi-VM deployments
@@ -193,19 +155,3 @@ Diagnostic tools to:
 6. **Monitoring**: Cloud Logging + Cloud Monitoring
 7. **CI/CD**: Cloud Build pipelines
 8. **ML Upgrade**: Optional transformer models for better NLP quality
-
-## Security Considerations
-
-**Current State** (coursework):
-- Public GitHub repo
-- Open firewall (0.0.0.0/0)
-- No authentication on API
-- No encryption
-
-**Production Requirements**:
-- Private repo with deploy keys
-- Restricted firewall (specific IP ranges)
-- API authentication (JWT tokens)
-- HTTPS with SSL certificates
-- Data encryption at rest
-- Secret Manager for credentials

@@ -13,6 +13,7 @@ import googleapiclient.discovery
 from googleapiclient.errors import HttpError
 
 # Configuration
+# ***CHANGE TO YOUR PROJECT_ID***
 PROJECT_ID = "substantial-art-471117-v1"
 ZONE = "us-west1-b"
 SOURCE_INSTANCE = "flask-instance"

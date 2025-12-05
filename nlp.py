@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Flesch-Kincaid Grade Level Analysis + Lightweight NLP Pipeline
 Pure Python implementation - no external dependencies

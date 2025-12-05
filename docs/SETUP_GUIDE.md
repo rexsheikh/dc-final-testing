@@ -48,109 +48,9 @@ Before running the setup scripts, ensure you have:
 
 ### GitHub Authentication Methods
 
-GitHub no longer supports password authentication for Git operations. Choose one of these methods:
+GitHub no longer supports password authentication for Git operations. Either generate SSH keys or PAT
 
-#### Method 1: Personal Access Token (PAT) - Recommended for Cloud Shell
-
-```bash
-# 1. Create a Personal Access Token on GitHub:
-#    - Go to: https://github.com/settings/tokens
-#    - Click "Generate new token" → "Generate new token (classic)"
-#    - Name: "GCP Cloud Shell Access"
-#    - Expiration: 90 days (or as needed)
-#    - Select scopes: ✓ repo (all)
-#    - Click "Generate token"
-#    - COPY THE TOKEN (you won't see it again!)
-
-# 2. Clone using the token as password:
-git clone https://github.com/rexsheikh/dc-final-testing
-# Username: rexsheikh
-# Password: <paste your token>
-
-# 3. Cache credentials to avoid re-entering:
-git config --global credential.helper 'cache --timeout=7200'  # 2 hours
-```
-
-#### Method 2: SSH Keys - Best for Long-term Use
-
-```bash
-# 1. Generate SSH key (if you don't have one)
-ssh-keygen -t ed25519 -C "your_email@example.com"
-# Press Enter for default location
-# Optionally set a passphrase
-
-# 2. Copy the public key
-cat ~/.ssh/id_ed25519.pub
-
-# 3. Add to GitHub:
-#    - Go to: https://github.com/settings/keys
-#    - Click "New SSH key"
-#    - Title: "GCP Cloud Shell"
-#    - Paste the public key
-#    - Click "Add SSH key"
-
-# 4. Test connection
-ssh -T git@github.com
-# Should see: "Hi rexsheikh! You've successfully authenticated..."
-
-# 5. Clone using SSH URL
-git clone git@github.com:rexsheikh/dc-final-testing.git
-```
-
-#### Method 3: GitHub CLI - Easiest for Cloud Shell
-
-```bash
-# 1. Install GitHub CLI (if not already installed)
-# On Cloud Shell:
-type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
-curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-sudo apt update
-sudo apt install gh -y
-
-# 2. Authenticate
-gh auth login
-# Choose: GitHub.com
-# Choose: HTTPS
-# Choose: Login with a web browser
-# Follow the prompts
-
-# 3. Clone repository
-gh repo clone rexsheikh/dc-final-testing
-```
-
-#### Method 4: Make Repository Public (Quick Test)
-
-If this is just for testing/coursework:
-
-```bash
-# 1. On GitHub, go to your repository settings:
-#    https://github.com/rexsheikh/dc-final-testing/settings
-
-# 2. Scroll to "Danger Zone" → "Change repository visibility"
-
-# 3. Click "Change visibility" → "Make public"
-
-# 4. Now clone without authentication:
-git clone https://github.com/rexsheikh/dc-final-testing.git
-```
-
-### Recommended Setup for GCP Cloud Shell
-
-If you're working in GCP Cloud Shell, use this quick setup:
-
-```bash
-# Option A: Use GitHub CLI (easiest)
-gh auth login
-gh repo clone rexsheikh/dc-final-testing
-
-# Option B: Use Personal Access Token
-# Create token at: https://github.com/settings/tokens
-git clone https://github.com/rexsheikh/dc-final-testing
-# Enter token when prompted for password
-git config --global credential.helper 'cache --timeout=7200'
-```
+test with ssh -T git@github.com
 
 ## Detailed Setup Steps
 
@@ -159,7 +59,8 @@ git config --global credential.helper 'cache --timeout=7200'
 The `setup_base_vm.sh` script automates the following:
 
 1. **GCP Environment Configuration**
-   - Sets project ID to `substantial-art-471117-v1`
+   - Sets project ID to `your-project-id`
+   - Change this constant throughotu the project files (very important!!)
    - Sets default zone to `us-west1-b`
    - Enables required APIs (Compute, Redis, Storage)
 
@@ -223,14 +124,14 @@ After setup completes, verify everything is configured:
 ```
 
 **Checks performed:**
-- ✓ gcloud CLI installation
-- ✓ GCP project configuration
-- ✓ Firewall rule exists
-- ✓ Base instance running
-- ✓ Snapshot created
-- ✓ Python installed on VM
-- ✓ Redis server running
-- ✓ Git installed
+- gcloud CLI installation
+- GCP project configuration
+- Firewall rule exists
+- Base instance running
+- Snapshot created
+- Python installed on VM
+- Redis server running
+- Git installed
 
 **Expected output:**
 ```
@@ -239,129 +140,18 @@ Text-to-Anki Setup Verification
 ======================================
 
 [CHECK] Checking gcloud CLI installation
-  ✓ PASS - gcloud CLI installed (version: 458.0.1)
+  PASS - gcloud CLI installed (version: 458.0.1)
 
 [CHECK] Checking GCP project configuration
-  ✓ PASS - Project configured: substantial-art-471117-v1
+  PASS - Project configured: substantial-art-471117-v1
 ...
-
-======================================
-Verification Summary
-======================================
-Passed: 8
-Failed: 0
-Skipped: 0
-
-✓ All checks passed!
-You're ready to deploy the service.
-```
-
-## Troubleshooting
-
-### Issue: "gcloud: command not found"
-
-**Solution:**
-```bash
-# Install Google Cloud SDK
-# macOS (with Homebrew):
-brew install google-cloud-sdk
-
-# Linux:
-curl https://sdk.cloud.google.com | bash
-exec -l $SHELL
-```
-
-### Issue: "Project not found or permission denied"
-
-**Solution:**
-```bash
-# Re-authenticate
-gcloud auth login
-
-# List available projects
-gcloud projects list
-
-# Set correct project
-gcloud config set project YOUR_PROJECT_ID
-```
-
-### Issue: Setup script fails at VM creation
-
-**Solution:**
-```bash
-# Check quota limits
-gcloud compute project-info describe --project=substantial-art-471117-v1
-
-# Try a different zone
-export ZONE="us-central1-a"
-./setup_base_vm.sh
-```
-
-### Issue: Cannot SSH into VM
-
-**Solution:**
-```bash
-# Wait 30 seconds after VM creation
-sleep 30
-
-# Try SSH with verbose output
-gcloud compute ssh flask-instance --zone=us-west1-b --ssh-flag="-v"
-
-# Check firewall rules
-gcloud compute firewall-rules list
-```
-
-### Issue: Redis not starting
-
-**Solution:**
-```bash
-# SSH into VM
-gcloud compute ssh flask-instance --zone=us-west1-b
-
-# Check Redis status
-sudo systemctl status redis-server
-
-# Restart Redis
-sudo systemctl restart redis-server
-
-# View logs
-sudo journalctl -u redis-server -n 50
-```
-
-### Issue: "Authentication failed" when cloning repository
-
-**Cause:** GitHub no longer accepts password authentication.
-
-**Solution:** Use one of the authentication methods above. For Cloud Shell, Personal Access Token or GitHub CLI are recommended.
-
-```bash
-# Quick fix with Personal Access Token:
-# 1. Get token from: https://github.com/settings/tokens
-# 2. Clone and use token as password:
-git clone https://github.com/rexsheikh/dc-final-testing
-# Username: rexsheikh
-# Password: ghp_xxxxxxxxxxxxxxxxxxxx (your token)
-```
-
-### Issue: "Permission denied (publickey)" with SSH
-
-**Solution:**
-```bash
-# Verify SSH key is added to ssh-agent
-ssh-add -l
-
-# If empty, add your key:
-ssh-add ~/.ssh/id_ed25519
-
-# Test GitHub connection
-ssh -T git@github.com
 ```
 
 ## Manual Setup (Alternative)
 
 If the automated script fails, you can set up manually:
 
-### 1. Configure GCP
+### 1. Configure GCP (Again, ensure project_id is update to your own)
 
 ```bash
 export PROJECT_ID="substantial-art-471117-v1"
@@ -480,14 +270,11 @@ gcloud compute firewall-rules delete allow-5000 --quiet
 ```
 
 ## Additional Resources
-
 - Full deployment guide: `DEPLOYMENT.md`
 - Project architecture: `README.md`
 - Course outline: `../outline.tex`
 
 ## Support
-
-If you encounter issues:
 1. Check the troubleshooting section above
 2. Review logs: `gcloud compute ssh flask-instance --command "sudo journalctl -xe"`
 3. Verify GCP quotas and permissions
