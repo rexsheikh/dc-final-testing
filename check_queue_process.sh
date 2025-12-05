@@ -26,8 +26,10 @@ fi
 
 for worker in "${worker_list[@]}"; do
   log "Worker $worker environment"
-  gcloud compute ssh "$worker" --zone="$ZONE" --command \
-    "python3 - <<'PY'\nimport os\nprint('REDIS_HOST env:', os.environ.get('REDIS_HOST'))\nPY"
+  gcloud compute ssh "$worker" --zone="$ZONE" --command "python3 - <<'PY'
+import os
+print('REDIS_HOST env:', os.environ.get('REDIS_HOST'))
+PY"
 
   log "Worker $worker process + log"
   gcloud compute ssh "$worker" --zone="$ZONE" --command \
