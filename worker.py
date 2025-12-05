@@ -87,9 +87,9 @@ def update_job_status(job_id: str, status: str, **kwargs):
         redis_client.set(f"job:{job_id}", json.dumps(job_data))
 
 
-def process_text_file(filepath: str, job_id: str) -> str:
+def process_text_content(text: str, filename: str, job_id: str) -> str:
     """
-    Process text file through lightweight NLP pipeline:
+    Process text content through lightweight NLP pipeline:
     1. Text normalization (regex-based)
     2. Summarization (extractive, word frequency)
     3. TF-IDF keyword extraction (manual calculation)
@@ -99,21 +99,16 @@ def process_text_file(filepath: str, job_id: str) -> str:
     Total processing time: 2-5 seconds (no ML frameworks)
     Returns path to output CSV file
     """
-    print(f"Processing file: {filepath}")
-    
-    # Read input text
-    with open(filepath, 'r', encoding='utf-8') as f:
-        text = f.read()
+    print(f"Processing content for file: {filename}", flush=True)
     
     # Run NLP pipeline (lightweight, pure Python)
-    filename = os.path.basename(filepath)
     results = process_pipeline(text, filename)
     
     # Generate output CSV
     output_path = os.path.join(OUTPUT_FOLDER, f"{job_id}_deck.csv")
     DeckAssembler.write_csv(results['cards'], output_path)
     
-    print(f"Generated deck with {len(results['cards'])} cards: {output_path}")
+    print(f"Generated deck with {len(results['cards'])} cards: {output_path}", flush=True)
     return output_path
 
 
@@ -140,14 +135,20 @@ def worker_loop():
                 continue
             
             job_data = json.loads(job_json)
-            filepath = job_data['filepath']
+            filename = job_data['filename']
+            file_content = job_data.get('file_content')
+            
+            if not file_content:
+                print(f"Job {job_id} missing file_content in metadata, skipping", flush=True)
+                update_job_status(job_id, 'failed', error='Missing file content in job metadata')
+                continue
             
             # Update status to processing
             update_job_status(job_id, 'processing', started_at=datetime.utcnow().isoformat())
             
-            # Process the file
+            # Process the file content
             try:
-                output_path = process_text_file(filepath, job_id)
+                output_path = process_text_content(file_content, filename, job_id)
                 update_job_status(
                     job_id,
                     'completed',

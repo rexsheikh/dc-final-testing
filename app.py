@@ -268,11 +268,16 @@ def upload_file():
             # Save file
             file.save(filepath)
             
+            # Read file content to store in Redis (for workers without shared filesystem)
+            with open(filepath, 'r', encoding='utf-8') as f:
+                file_content = f.read()
+            
             # Create job metadata
             job_data = {
                 'job_id': job_id,
                 'filename': filename,
                 'filepath': filepath,
+                'file_content': file_content,  # Store content in Redis
                 'status': 'queued',
                 'created_at': datetime.utcnow().isoformat(),
                 'user': request.form.get('user', 'anonymous')
