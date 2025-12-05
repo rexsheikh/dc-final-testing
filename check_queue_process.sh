@@ -44,6 +44,13 @@ for worker in "${worker_list[@]}"; do
   log "Worker $worker metadata server values"
   gcloud compute ssh "$worker" --zone="$ZONE" --command "echo 'rest-internal-ip:' && curl -s -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/rest-internal-ip || echo 'N/A'; echo 'shared-root:' && curl -s -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/shared-root || echo 'N/A'"
 
+  log "Worker $worker Redis connectivity"
+  gcloud compute ssh "$worker" --zone="$ZONE" --command "
+REST_IP=\$(curl -s -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/rest-internal-ip)
+echo \"Testing Redis connection to \$REST_IP:6379\"
+redis-cli -h \$REST_IP -p 6379 ping 2>&1 || echo 'Redis connection FAILED'
+"
+
   log "Worker $worker environment (from running process)"
   gcloud compute ssh "$worker" --zone="$ZONE" --command "
 # Get PID of worker process
@@ -62,7 +69,7 @@ fi
 
   log "Worker $worker process + recent log"
   gcloud compute ssh "$worker" --zone="$ZONE" --command \
-    "ps -ef | grep -v grep | grep worker.py || echo 'No worker process'; echo '--- Last 60 lines of log ---'; sudo tail -n 60 /var/log/anki-worker.log || echo 'No log'"
+    "ps -ef | grep -v grep | grep worker.py || echo 'No worker process'; echo '--- Last 60 lines of log ---'; sudo tail -n 60 /var/log/anki-worker.log || echo 'No log'; echo '--- Check for Python errors ---'; sudo journalctl -u anki-worker -n 30 --no-pager || echo 'No journalctl'"
 done
 
 log "REST systemd status"
