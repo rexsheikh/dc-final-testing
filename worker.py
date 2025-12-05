@@ -15,9 +15,30 @@ import json
 import time
 import redis
 from datetime import datetime
+from urllib.request import Request, urlopen
+from urllib.error import URLError
 from nlp import process_pipeline, DeckAssembler
 
-REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
+METADATA_REDIS_URL = "http://metadata.google.internal/computeMetadata/v1/instance/attributes/rest-internal-ip"
+
+
+def discover_redis_host(default: str = "localhost") -> str:
+    """Pick Redis host from env or metadata server."""
+    env_host = os.environ.get("REDIS_HOST")
+    if env_host:
+        return env_host
+    try:
+        req = Request(METADATA_REDIS_URL, headers={"Metadata-Flavor": "Google"})
+        with urlopen(req, timeout=2) as resp:
+            ip = resp.read().decode().strip()
+            if ip:
+                return ip
+    except URLError:
+        pass
+    return default
+
+
+REDIS_HOST = discover_redis_host()
 REDIS_PORT = int(os.environ.get('REDIS_PORT', '6379'))
 
 # Redis connection (update for Cloud Memorystore)
