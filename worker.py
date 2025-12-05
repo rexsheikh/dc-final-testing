@@ -57,14 +57,23 @@ def discover_path(env_key: str, metadata_url: str, default: str) -> str:
 REDIS_HOST = discover_redis_host()
 REDIS_PORT = int(os.environ.get('REDIS_PORT', '6379'))
 
-# Redis connection (update for Cloud Memorystore)
-redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-
 shared_root = discover_path('SHARED_STORAGE_ROOT', METADATA_SHARED_ROOT_URL, '/tmp')
 shared_output = discover_path('SHARED_OUTPUT_FOLDER', METADATA_SHARED_OUTPUT_URL,
                               os.path.join(shared_root, 'outputs') if shared_root else '/tmp/outputs')
 OUTPUT_FOLDER = shared_output
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+
+# Log configuration at startup for debugging
+print(f"Worker starting with configuration:")
+print(f"  REDIS_HOST: {REDIS_HOST}")
+print(f"  REDIS_PORT: {REDIS_PORT}")
+print(f"  SHARED_STORAGE_ROOT: {shared_root}")
+print(f"  SHARED_OUTPUT_FOLDER: {OUTPUT_FOLDER}")
+print(f"  Environment REDIS_HOST: {os.environ.get('REDIS_HOST')}")
+print(f"  Environment SHARED_STORAGE_ROOT: {os.environ.get('SHARED_STORAGE_ROOT')}")
+
+# Redis connection (update for Cloud Memorystore)
+redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
 
 def update_job_status(job_id: str, status: str, **kwargs):

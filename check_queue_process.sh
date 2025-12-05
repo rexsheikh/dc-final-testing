@@ -35,6 +35,9 @@ for worker in "${worker_list[@]}"; do
   log "Worker $worker systemd status"
   gcloud compute ssh "$worker" --zone="$ZONE" --command "systemctl status anki-worker --no-pager || echo 'Systemd service not found (old deployment?)'"
 
+  log "Worker $worker systemd service file"
+  gcloud compute ssh "$worker" --zone="$ZONE" --command "echo '--- Service Environment Lines ---' && grep '^Environment=' /etc/systemd/system/anki-worker.service 2>/dev/null || echo 'Service file not found'"
+
   log "Worker $worker metadata server values"
   gcloud compute ssh "$worker" --zone="$ZONE" --command "echo 'rest-internal-ip:' && curl -s -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/rest-internal-ip || echo 'N/A'; echo 'shared-root:' && curl -s -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/shared-root || echo 'N/A'"
 
@@ -57,6 +60,9 @@ done
 
 log "REST systemd status"
 gcloud compute ssh "$REST_INSTANCE" --zone="$ZONE" --command "systemctl status anki-rest --no-pager || echo 'Systemd service not found (old deployment?)'"
+
+log "REST systemd service file"
+gcloud compute ssh "$REST_INSTANCE" --zone="$ZONE" --command "echo '--- Service Environment Lines ---' && grep '^Environment=' /etc/systemd/system/anki-rest.service 2>/dev/null || echo 'Service file not found'"
 
 log "REST Flask log"
 gcloud compute ssh "$REST_INSTANCE" --zone="$ZONE" --command "sudo tail -n 60 /var/log/anki-rest.log"

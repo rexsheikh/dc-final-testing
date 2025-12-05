@@ -36,9 +36,9 @@ Redis 5.x & Queue + metadata store & LPUSH/BRPOP job queue plus job status hashe
 \addlinespace
 NLP worker scripts (\texttt{worker.py}, \texttt{nlp.py}) & Transform text to decks & Workers consume queue jobs, run FK + lightweight pipeline, and emit CSV output. \\
 \addlinespace
-Deployment tooling (\texttt{setup\_base\_vm.sh}, \texttt{create\_rest\_tier.py}, \texttt{create\_workers.py}) & Provisioning + automation & Creates snapshots, firewall rules, and per-tier VMs with startup scripts. \\
+Deployment tooling (\texttt{setup\_base\_vm.sh}, \texttt{create\_rest\_tier.py}, \texttt{create\_workers.py}) & Provisioning + automation & Creates snapshots, firewall rules, and per-tier VMs with systemd-based startup scripts for robust process management. \\
 \addlinespace
-Verification scripts (\texttt{verify\_setup.sh}, \texttt{quick-verify.sh}, \texttt{debug\_rest\_server.sh}) & Diagnostics and smoke tests & Validate gcloud config, VM state, and REST endpoints after deployment. \\
+Verification scripts (\texttt{verify\_setup.sh}, \texttt{check\_queue\_process.sh}, \texttt{debug\_rest\_server.sh}) & Diagnostics and smoke tests & Validate gcloud config, VM state, systemd service status, environment variables, and REST endpoints after deployment. \\
 \addlinespace
 REST VM hardware & \texttt{e2-medium} (2 vCPU, 4 GB RAM) & Hosts Flask + Redis + shared disk mounted at \texttt{/mnt/shared}. \\
 \addlinespace
@@ -89,8 +89,9 @@ Networking & Firewall rule \texttt{allow-5000}, internal SSH & Public TCP/5000 f
 \textbf{Debugging workflow.}
 \begin{itemize}[itemsep=0.2em]
     \item The setup script now performs an SSH readiness loop before copying dependency installers, preventing ``connection refused'' errors on brand-new instances.
-    \item \texttt{verify\_setup.sh} and \texttt{quick-verify.sh} assert that required gcloud services, firewall rules, and VMs exist before provisioning additional infrastructure.
-    \item \texttt{debug\_rest\_server.sh} tails Flask logs, restarts the service, and runs health checks, accelerating root-cause analysis when uploads fail or ports are misconfigured.
+    \item \texttt{verify\_setup.sh} and \texttt{check\_queue\_process.sh} assert that required gcloud services, firewall rules, VMs, and systemd services exist and are running before declaring successful deployment.
+    \item \texttt{check\_queue\_process.sh} provides comprehensive diagnostics: systemd service status, metadata server values, environment variables from running processes, shared storage access, and recent logs from both journalctl and traditional log files.
+    \item Systemd integration enables powerful debugging commands: \texttt{systemctl status anki-worker} shows service health, \texttt{journalctl -u anki-worker -f} streams live logs, and automatic restart-on-failure ensures workers recover from transient errors without manual intervention.
     \item Redis metadata allows replaying failed jobs by inspecting the stored file path and rerunning \texttt{worker.py} locally with the same payload.
 \end{itemize}
 
@@ -105,9 +106,11 @@ Networking & Firewall rule \texttt{allow-5000}, internal SSH & Public TCP/5000 f
 
 \textbf{Working system explanation.}
 \begin{itemize}[itemsep=0.2em]
-    \item Single REST VM (\texttt{e2-medium}) handles uploads, metadata queries, and CSV downloads while co-locating Redis for a simple deployment footprint.
-    \item Two worker VMs (\texttt{f1-micro}) pull jobs concurrently; each job reads a text file into memory, runs FK + TF-IDF + regex NER (2--5 seconds per document), generates a deck, and updates Redis status.
-    \item Filesystem storage now lives on a shared persistent disk (\texttt{/mnt/shared/uploads} and \texttt{/mnt/shared/outputs}), so REST and worker tiers see the same files while retaining a clean upgrade path to Cloud Storage.
+    \item Single REST VM (\texttt{e2-medium}) handles uploads, metadata queries, and CSV downloads while co-locating Redis for a simple deployment footprint. The REST tier runs as a systemd service (\texttt{anki-rest.service}) with auto-restart on failure and integrated logging via journalctl.
+    \item Two worker VMs (\texttt{f1-micro}) pull jobs concurrently via \texttt{BRPOP}; each worker runs as a systemd service (\texttt{anki-worker.service}) ensuring automatic recovery from crashes with 10-second restart delays.
+    \item Environment variables (\texttt{REDIS\_HOST}, \texttt{SHARED\_STORAGE\_ROOT}, \texttt{SHARED\_UPLOAD\_FOLDER}, \texttt{SHARED\_OUTPUT\_FOLDER}) are configured in systemd service files and also available via GCP instance metadata server, providing robust configuration with fallback mechanisms.
+    \item Each worker job reads text from \texttt{/mnt/shared/uploads}, runs FK + TF-IDF + regex NER (2--5 seconds per document), generates a deck to \texttt{/mnt/shared/outputs}, and updates Redis status atomically.
+    \item Shared storage at \texttt{/mnt/shared} enables workers to access uploaded files without network copies, while maintaining a clean upgrade path to Cloud Storage buckets with signed URLs.
 \end{itemize}
 
 \textbf{Supported workload.}
@@ -122,10 +125,11 @@ Networking & Firewall rule \texttt{allow-5000}, internal SSH & Public TCP/5000 f
     \item Local Redis + filesystem make the REST VM a single point of failure; migrating to Cloud Memorystore and Cloud Storage would improve availability and horizontal scalability.
     \item The \texttt{f1-micro} instances have only 614 MB RAM; extremely large text files (multi-MB) could cause swapping or longer processing times. Input size limits (16 MB uploads, 50,000-character default processing window) mitigate this.
     \item Network egress from the REST VM could saturate if many large decks are downloaded simultaneously; in practice, CSVs are tiny ($\sim$KB), but heavier workloads would benefit from load-balanced REST instances.
+    \item Systemd auto-restart (10-second delay) prevents cascading failures but can mask underlying configuration issues; \texttt{check\_queue\_process.sh} includes restart count monitoring to detect problematic crash loops.
 \end{itemize}
 
 \section{Summary}
 
-The Autodeck service deliberately prioritizes predictable deployment and datacenter-pattern reinforcement (snapshots, queues, monitoring scripts, shared storage mounts) over sophisticated NLP. By running everything on small Google Compute Engine VMs with pure-Python tooling, the stack remains easy to debug, test, and reason about while still demonstrating distributed workload orchestration. Scaling paths (Cloud Memorystore, Cloud Storage, load-balanced REST tiers) are documented for future iterations once the coursework requirements are satisfied. 
+The Autodeck service deliberately prioritizes predictable deployment and datacenter-pattern reinforcement (snapshots, queues, systemd process management, monitoring scripts, shared storage mounts) over sophisticated NLP. By running everything on small Google Compute Engine VMs with pure-Python tooling and systemd-managed services, the stack remains easy to debug, test, and reason about while demonstrating production-grade reliability patterns (auto-restart, integrated logging, environment isolation). Scaling paths (Cloud Memorystore, Cloud Storage, load-balanced REST tiers) are documented for future iterations once the coursework requirements are satisfied. 
 
 \end{document}

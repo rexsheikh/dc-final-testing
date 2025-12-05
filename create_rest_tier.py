@@ -176,7 +176,8 @@ mkdir -p "$SHARED_ROOT/uploads" "$SHARED_ROOT/outputs"
 chown -R $(whoami):$(whoami) "$SHARED_ROOT"
 
 # Create systemd service for Flask REST API
-cat > /etc/systemd/system/anki-rest.service <<EOF
+# Note: Using unquoted EOF to allow variable expansion
+cat > /etc/systemd/system/anki-rest.service <<EOFSERVICE
 [Unit]
 Description=Anki REST API Service
 After=network-online.target redis-server.service
@@ -197,7 +198,7 @@ StandardError=append:/var/log/anki-rest.log
 
 [Install]
 WantedBy=multi-user.target
-EOF
+EOFSERVICE
 
 # Enable and start service
 systemctl daemon-reload
